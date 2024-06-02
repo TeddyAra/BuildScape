@@ -15,7 +15,7 @@
 #include <cstdint>
 #include <random>
 
-const bool INTERNAL_FACE_CULLING = false;
+const bool INTERNAL_FACE_CULLING = true;
 
 // Random number generator
 std::random_device rd;
@@ -77,6 +77,11 @@ glm::vec3 cameraPos = normalPos;
 glm::vec3 cameraFront = normalFront;
 glm::vec3 cameraUp = normalUp;
 
+glm::vec3 virtualPos;
+glm::vec3 virtualFront;
+glm::vec3 virtualUp;
+bool usingVirtualCamera;
+
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
@@ -92,7 +97,6 @@ float recordingTime = 10;
 float recordingTimer = 0;
 float recordCamSpeed = 3;
 bool uiCollapsed = false;
-bool virtualCam = false;
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 	if (firstMouse) {
@@ -125,24 +129,11 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 	cameraFront = glm::normalize(front);
 }
 
-bool isNeighborPresent(const std::vector<std::uint32_t>& blocks, int x, int y, int z) {
-	for (const auto& block : blocks) {
-		int bx = (block >> 28) & 0x0F;
-		int by = (block >> 24) & 0x0F;
-		int bz = (block >> 20) & 0x0F;
-		int id = (block >> 12) & 0xFF;
-		if (id != 0 && bx == x && by == y && bz == z) {
-			return true;
-		}
-	}
-	return false;
-}
-
 GLuint VAO, VBO, EBO;
 
 const unsigned int cubeIndicesFront[] = {
-		0, 2, 3,
-		0, 3, 1
+	0, 2, 3,
+	0, 3, 1
 };
 
 const unsigned int cubeIndicesLeft[] = {
@@ -170,8 +161,42 @@ const unsigned int cubeIndicesBottom[] = {
 	4, 1, 5
 };
 
+bool isPointInsideViewFrustum(const glm::vec3 p, const glm::mat4 vp) {
+	glm::vec4 p4D(p, 1.0f);
+	glm::vec4 clipSpace = vp * p4D;
+
+	bool insideViewFrustum = ((clipSpace.x <= clipSpace.w) &&
+							  (clipSpace.x >= -clipSpace.w) &&
+							  (clipSpace.y <= clipSpace.w) &&
+							  (clipSpace.y >= -clipSpace.w) &&
+							  (clipSpace.z <= clipSpace.w) &&
+							  (clipSpace.z >= -clipSpace.w));
+
+	return insideViewFrustum;
+}
+
+bool frustumCulling(std::uint32_t block, glm::vec3 pos, const glm::mat4 vp, float blockSize) {
+	glm::vec3 point = pos - glm::vec3(-1, -1, -1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+	point = pos - glm::vec3(1, -1, -1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+	point = pos - glm::vec3(-1, 1, -1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+	point = pos - glm::vec3(1, 1, -1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+	point = pos - glm::vec3(-1, -1, 1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+	point = pos - glm::vec3(1, -1, 1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+	point = pos - glm::vec3(-1, 1, 1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+	point = pos - glm::vec3(1, 1, 1) * (blockSize / 2);
+	if (isPointInsideViewFrustum(point, vp)) return false;
+
+	return true;
+}
+
 int isNeighborPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {
-	// Calculate the neighboring index based on the direction
 	std::uint32_t block = blocks[index];
 	int x = (block >> 28) & 0x0F;
 	int y = (block >> 24) & 0x0F;
@@ -215,12 +240,10 @@ void internalFaceCulling(Chunk& chunk) {
     for (size_t i = 0; i < blocks.size(); ++i) {
         std::uint32_t block = blocks[i];
         int id = (block >> 12) & 0xFF;
-        if (id == 0) continue; // Skip air blocks
+        if (id == 0) continue;
 
-        // Initialize blockCopy with the current block value
         std::uint32_t blockCopy = block;
 
-        // Check for each face and set the corresponding bits
         blockCopy &= ~(0x3F << 6); 
         for (int j = 0; j < 6; ++j) {
             if (isNeighborPresent(blocks, i, j)) {
@@ -243,11 +266,14 @@ void processInput(GLFWwindow* window) {
 
 	// Virtual camera
 	if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
-		virtualCam = true;
+		usingVirtualCamera = true;
+		virtualPos = cameraPos;
+		virtualFront = cameraFront;
+		virtualUp = cameraUp;
 	}
 
 	if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
-		virtualCam = false;
+		usingVirtualCamera = false;
 	}
 
 	// Collapse
@@ -508,10 +534,7 @@ int main(void) {
 
 		glUniform1i(wireLoc, wireframe);
 
-		if (virtualCam)
-			view = glm::lookAt(normalPos, normalPos + normalFront, normalUp);
-		else
-			view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 		
 		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
@@ -528,6 +551,10 @@ int main(void) {
 				int y = (block >> 24) & 0x0F;
 				int z = (block >> 20) & 0x0F;
 
+				glm::vec3 pos(glm::vec3(x * blockSize + chunk.posX, y * blockSize + chunk.posY, z * blockSize + chunk.posZ));
+
+				if (frustumCulling(block, pos, view, blockSize)) continue;
+
 				int left = 0;
 				int right = 0;
 				int down = 0;
@@ -543,8 +570,6 @@ int main(void) {
 					front = (block >> 7) & 0x01;
 					back = (block >> 6) & 0x01;
 				}
-
-				glm::vec3 pos(glm::vec3(x * blockSize + chunk.posX, y * blockSize + chunk.posY, z * blockSize + chunk.posZ));
 
 				model = glm::translate(glm::mat4(1.0f), pos);
 				glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
@@ -606,7 +631,7 @@ int main(void) {
 			ImGui::Text("[F] Start recording the performance");
 			ImGui::Text("[T] Look at the wireframes of the voxels");
 			ImGui::Text("[G] Look at the triangles of the voxels");
-			ImGui::Text(virtualCam ? "[V] Turn virtual camera off" : "[C] Turn virtual camera on");
+			ImGui::Text(usingVirtualCamera ? "[V] Turn virtual camera off" : "[C] Turn virtual camera on");
 			ImGui::Text("");
 			ImGui::Text("[WASDQE] Move the camera");
 			ImGui::Text("[Mouse] Look around");
