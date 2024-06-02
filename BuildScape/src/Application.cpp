@@ -15,6 +15,8 @@
 #include <cstdint>
 #include <random>
 
+const bool INTERNAL_FACE_CULLING = false;
+
 // Random number generator
 std::random_device rd;
 std::mt19937 gen(rd());
@@ -25,12 +27,18 @@ int random(int min, int max) {
 }
 
 struct Chunk {
-	// unsigned 32 bit int, 20/32
+	// unsigned 32 bit int, 26/32
 	// 
 	// x position   = 4 bits
 	// y position   = 4 bits
 	// z position   = 4 bits
 	// id			= 8 bits
+	// face up		= 1 bit
+	// face down	= 1 bit
+	// face right	= 1 bit
+	// face left	= 1 bit
+	// face front	= 1 bit
+	// face back	= 1 bit
 	//
 	// 1 bit  = 0x01 = 0 -   1
 	// 2 bits = 0x03 = 0 -   3
@@ -74,7 +82,8 @@ float lastFrame = 0.0f;
 
 float yaw = -90.0f;
 float pitch = 0.0f;
-float lastX = 400, lastY = 300;
+float lastX = 400;
+float lastY = 300;
 bool firstMouse = true;
 
 int wireframe = 0;
@@ -83,6 +92,7 @@ float recordingTime = 10;
 float recordingTimer = 0;
 float recordCamSpeed = 3;
 bool uiCollapsed = false;
+bool virtualCam = false;
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 	if (firstMouse) {
@@ -115,6 +125,113 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 	cameraFront = glm::normalize(front);
 }
 
+bool isNeighborPresent(const std::vector<std::uint32_t>& blocks, int x, int y, int z) {
+	for (const auto& block : blocks) {
+		int bx = (block >> 28) & 0x0F;
+		int by = (block >> 24) & 0x0F;
+		int bz = (block >> 20) & 0x0F;
+		int id = (block >> 12) & 0xFF;
+		if (id != 0 && bx == x && by == y && bz == z) {
+			return true;
+		}
+	}
+	return false;
+}
+
+GLuint VAO, VBO, EBO;
+
+const unsigned int cubeIndicesFront[] = {
+		0, 2, 3,
+		0, 3, 1
+};
+
+const unsigned int cubeIndicesLeft[] = {
+	4, 6, 2,
+	4, 2, 0
+};
+
+const unsigned int cubeIndicesRight[] = {
+	1, 3, 7,
+	1, 7, 5
+};
+
+const unsigned int cubeIndicesBack[] = {
+	5, 7, 6,
+	5, 6, 4
+};
+
+const unsigned int cubeIndicesTop[] = {
+	2, 6, 7,
+	2, 7, 3
+};
+
+const unsigned int cubeIndicesBottom[] = {
+	4, 0, 1,
+	4, 1, 5
+};
+
+int isNeighborPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {
+	// Calculate the neighboring index based on the direction
+	std::uint32_t block = blocks[index];
+	int x = (block >> 28) & 0x0F;
+	int y = (block >> 24) & 0x0F;
+	int z = (block >> 20) & 0x0F;
+
+	switch (dir) {
+	case 0: // Left
+		if (x == 0) return 0;
+		index -= 1;
+		break;
+	case 1: // Right
+		if (x == 15) return 0;
+		index += 1;
+		break;
+	case 2: // Down
+		if (y == 0) return 0;
+		index -= 256;
+		break;
+	case 3: // Up
+		if (y == 15) return 0;
+		index += 256;
+		break;
+	case 4: // Front
+		if (z == 0) return 0;
+		index -= 16;
+		break;
+	case 5: // Back
+		if (z == 15) return 0;
+		index += 16;
+		break;
+	}
+
+	block = blocks[index];
+	int id = (block >> 12) & 0xFF;
+	return id == 0 ? 0 : 1;
+}
+
+void internalFaceCulling(Chunk& chunk) {
+    std::vector<std::uint32_t>& blocks = chunk.blocks;
+
+    for (size_t i = 0; i < blocks.size(); ++i) {
+        std::uint32_t block = blocks[i];
+        int id = (block >> 12) & 0xFF;
+        if (id == 0) continue; // Skip air blocks
+
+        // Initialize blockCopy with the current block value
+        std::uint32_t blockCopy = block;
+
+        // Check for each face and set the corresponding bits
+        blockCopy &= ~(0x3F << 6); 
+        for (int j = 0; j < 6; ++j) {
+            if (isNeighborPresent(blocks, i, j)) {
+                blockCopy |= (1 << (11 - j));
+            }
+        }
+
+        blocks[i] = blockCopy;
+    }
+}
+
 // Input
 void processInput(GLFWwindow* window) {
 	// Reset
@@ -122,6 +239,15 @@ void processInput(GLFWwindow* window) {
 		cameraPos = normalPos;
 		cameraFront = normalFront;
 		cameraUp = normalUp;
+	}
+
+	// Virtual camera
+	if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
+		virtualCam = true;
+	}
+
+	if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
+		virtualCam = false;
 	}
 
 	// Collapse
@@ -135,6 +261,10 @@ void processInput(GLFWwindow* window) {
 
 	// Record
 	if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS && !recording) {
+		cameraPos = normalPos;
+		cameraFront = normalFront;
+		cameraUp = normalUp;
+
 		recording = true;
 		recordingTimer = recordingTime;
 	}
@@ -197,32 +327,6 @@ int main(void) {
 		 verDist,  verDist,  verDist
 	};
 
-	const unsigned int cubeIndices[] = {
-		// Front
-		0, 2, 3,
-		0, 3, 1,
-
-		// Left
-		4, 6, 2,
-		4, 2, 0,
-
-		// Right
-		1, 3, 7,
-		1, 7, 5,
-
-		// Back
-		5, 7, 6,
-		5, 6, 4,
-
-		// Top
-		2, 6, 7,
-		2, 7, 3,
-
-		// Bottom
-		4, 0, 1,
-		4, 1, 5
-	};
-
 	GLFWwindow* window;
 
 	// Initialize glfw
@@ -283,6 +387,7 @@ int main(void) {
 				}
 			}
 
+			if (INTERNAL_FACE_CULLING) internalFaceCulling(chunk);
 			chunks.push_back(chunk);
 		}
 	}
@@ -299,7 +404,6 @@ int main(void) {
 	style.Colors[ImGuiCol_TitleBgCollapsed] = titleColor;
 
 	// Arrays
-	GLuint VAO, VBO, EBO;
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
 	glGenBuffers(1, &EBO);
@@ -310,7 +414,7 @@ int main(void) {
 	glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesFront), cubeIndicesFront, GL_STATIC_DRAW);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
@@ -404,7 +508,11 @@ int main(void) {
 
 		glUniform1i(wireLoc, wireframe);
 
-		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		if (virtualCam)
+			view = glm::lookAt(normalPos, normalPos + normalFront, normalUp);
+		else
+			view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		
 		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
@@ -413,19 +521,67 @@ int main(void) {
 		// For each block in the chunk, apply a model transformation and draw it
 		for (Chunk chunk : chunks) {
 			for (const auto& block : chunk.blocks) {
-				int x = (block >> 28) & 0x0F;
-				int y = (block >> 24) & 0x0F;
-				int z = (block >> 20) & 0x0F;
 				int id = (block >> 12) & 0xFF;
 				if (id == 0) continue;
 
-				model = glm::translate(glm::mat4(1.0f), glm::vec3(x * blockSize + chunk.posX, y * blockSize + chunk.posY, z * blockSize + chunk.posZ));
+				int x = (block >> 28) & 0x0F;
+				int y = (block >> 24) & 0x0F;
+				int z = (block >> 20) & 0x0F;
+
+				int left = 0;
+				int right = 0;
+				int down = 0;
+				int up = 0;
+				int front = 0;
+				int back = 0;
+
+				if (INTERNAL_FACE_CULLING) {
+					left = (block >> 11) & 0x01;
+					right = (block >> 10) & 0x01;
+					down = (block >> 9) & 0x01;
+					up = (block >> 8) & 0x01;
+					front = (block >> 7) & 0x01;
+					back = (block >> 6) & 0x01;
+				}
+
+				glm::vec3 pos(glm::vec3(x * blockSize + chunk.posX, y * blockSize + chunk.posY, z * blockSize + chunk.posZ));
+
+				model = glm::translate(glm::mat4(1.0f), pos);
 				glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 
 				GLuint colLoc = glGetUniformLocation(shaderProgram, "col");
 				glUniform3f(colLoc, wireframe, wireframe, wireframe);
 
-				glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+				if (left == 0) {
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesLeft), cubeIndicesLeft, GL_STATIC_DRAW);
+					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				}
+				if (right == 0) {
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesRight), cubeIndicesRight, GL_STATIC_DRAW);
+					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				}
+				if (down == 0) {
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesBottom), cubeIndicesBottom, GL_STATIC_DRAW);
+					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				}
+				if (up == 0) {
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesTop), cubeIndicesTop, GL_STATIC_DRAW);
+					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				}
+				if (front == 0) {
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesFront), cubeIndicesFront, GL_STATIC_DRAW);
+					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				}
+				if (back == 0) {
+					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesBack), cubeIndicesBack, GL_STATIC_DRAW);
+					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				}
 			}
 		}
 
@@ -450,6 +606,7 @@ int main(void) {
 			ImGui::Text("[F] Start recording the performance");
 			ImGui::Text("[T] Look at the wireframes of the voxels");
 			ImGui::Text("[G] Look at the triangles of the voxels");
+			ImGui::Text(virtualCam ? "[V] Turn virtual camera off" : "[C] Turn virtual camera on");
 			ImGui::Text("");
 			ImGui::Text("[WASDQE] Move the camera");
 			ImGui::Text("[Mouse] Look around");
