@@ -16,6 +16,9 @@
 #include <random>
 
 const bool INTERNAL_FACE_CULLING = true;
+const bool BACK_FACE_CULLING = true;
+
+float blockSize = 0.5f;
 
 // Random number generator
 std::random_device rd;
@@ -63,10 +66,31 @@ struct Chunk {
 	int posY;
 	int posZ;
 
+	bool ignoreLeft =	false;
+	bool ignoreRight =	false;
+	bool ignoreDown =	false;
+	bool ignoreUp =		false;
+	bool ignoreFront =	false;
+	bool ignoreBack =	false;
+
 	void AddBlock(std::uint32_t block) {
 		blocks.push_back(block);
 	}
+
+	bool operator==(const Chunk& chunk) {
+		return (posX == chunk.posX &&
+				posY == chunk.posY &&
+				posZ == chunk.posZ);
+	}
+
+	bool operator!=(const Chunk& chunk) {
+		return (posX != chunk.posX ||
+				posY != chunk.posY ||
+				posZ != chunk.posZ);
+	}
 };
+
+std::vector<Chunk> chunks;
 
 // Camera
 glm::vec3 normalPos = glm::vec3(-2.0f, 8.0f, -2.0f);
@@ -81,6 +105,8 @@ glm::vec3 virtualPos;
 glm::vec3 virtualFront;
 glm::vec3 virtualUp;
 bool usingVirtualCamera;
+
+glm::vec3 closestChunkPos;
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -161,41 +187,6 @@ const unsigned int cubeIndicesBottom[] = {
 	4, 1, 5
 };
 
-bool isPointInsideViewFrustum(const glm::vec3 p, const glm::mat4 vp) {
-	glm::vec4 p4D(p, 1.0f);
-	glm::vec4 clipSpace = vp * p4D;
-
-	bool insideViewFrustum = ((clipSpace.x <= clipSpace.w) &&
-							  (clipSpace.x >= -clipSpace.w) &&
-							  (clipSpace.y <= clipSpace.w) &&
-							  (clipSpace.y >= -clipSpace.w) &&
-							  (clipSpace.z <= clipSpace.w) &&
-							  (clipSpace.z >= -clipSpace.w));
-
-	return insideViewFrustum;
-}
-
-bool frustumCulling(std::uint32_t block, glm::vec3 pos, const glm::mat4 vp, float blockSize) {
-	glm::vec3 point = pos - glm::vec3(-1, -1, -1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-	point = pos - glm::vec3(1, -1, -1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-	point = pos - glm::vec3(-1, 1, -1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-	point = pos - glm::vec3(1, 1, -1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-	point = pos - glm::vec3(-1, -1, 1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-	point = pos - glm::vec3(1, -1, 1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-	point = pos - glm::vec3(-1, 1, 1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-	point = pos - glm::vec3(1, 1, 1) * (blockSize / 2);
-	if (isPointInsideViewFrustum(point, vp)) return false;
-
-	return true;
-}
-
 int isNeighborPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {
 	std::uint32_t block = blocks[index];
 	int x = (block >> 28) & 0x0F;
@@ -257,6 +248,8 @@ void internalFaceCulling(Chunk& chunk) {
 
 // Input
 void processInput(GLFWwindow* window) {
+	bool checkCurrentChunk = false;
+
 	// Reset
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 		cameraPos = normalPos;
@@ -293,6 +286,8 @@ void processInput(GLFWwindow* window) {
 
 		recording = true;
 		recordingTimer = recordingTime;
+
+		checkCurrentChunk = true;
 	}
 
 	// Render switch
@@ -310,22 +305,70 @@ void processInput(GLFWwindow* window) {
 	float cameraSpeed = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? 10.0f : 5.0f) * deltaTime; 
 
 	// Forward and backward
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
 		cameraPos += cameraSpeed * cameraFront;
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+
+		checkCurrentChunk = true;
+	}
+	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
 		cameraPos -= cameraSpeed * cameraFront;
 
+		checkCurrentChunk = true;
+	}
+
 	// Left and right
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
 		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+
+		checkCurrentChunk = true;
+	}
+	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
 		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 
+		checkCurrentChunk = true;
+	}
+
 	// Up and down
-	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
 		cameraPos += glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), cameraFront)) * cameraSpeed;
-	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+
+		checkCurrentChunk = true;
+	}
+	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
 		cameraPos -= glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), cameraFront)) * cameraSpeed;
+
+		checkCurrentChunk = true;
+	}
+
+	if (checkCurrentChunk && BACK_FACE_CULLING) {
+		glm::vec3 pos = usingVirtualCamera ? virtualPos : cameraPos;
+
+		for (Chunk& chunk : chunks) {
+			if (pos.x > chunk.posX * 16 * blockSize && pos.x < (chunk.posX + 1) * 16 * blockSize &&
+				pos.y > chunk.posY * 16 * blockSize && pos.y < (chunk.posY + 1) * 16 * blockSize &&
+				pos.z > chunk.posZ * 16 * blockSize && pos.z < (chunk.posZ + 1) * 16 * blockSize) {
+
+				glm::vec3 newClosest(chunk.posX, chunk.posY, chunk.posZ);
+
+				std::cout << newClosest.x << " " << newClosest.y << " " << newClosest.z << " | " 
+					<< closestChunkPos.x << " " << closestChunkPos.y << " " << closestChunkPos.z << std::endl;
+
+				if (newClosest != closestChunkPos) {
+					closestChunkPos = newClosest;
+
+					for (int i = 0; i < chunks.size(); i++) {
+						if (chunks[i].posX < closestChunkPos.x * 16 * blockSize) chunks[i].ignoreLeft = true;
+						if (chunks[i].posX > closestChunkPos.x * 16 * blockSize) chunks[i].ignoreRight = true;
+						if (chunks[i].posY < closestChunkPos.y * 16 * blockSize) chunks[i].ignoreDown = true;
+						if (chunks[i].posY > closestChunkPos.y * 16 * blockSize) chunks[i].ignoreUp = true;
+						if (chunks[i].posZ < closestChunkPos.z * 16 * blockSize) chunks[i].ignoreBack = true;
+						if (chunks[i].posZ > closestChunkPos.z * 16 * blockSize) chunks[i].ignoreFront = true;
+					}
+				}
+				break;
+			}
+		}
+	}
 }
 
 int main(void) {
@@ -338,7 +381,6 @@ int main(void) {
 	int windowHeight = 540;
 
 	// Game variables
-	float blockSize = 0.5f;
 	int test = 4;
 
 	float verDist = blockSize / 2;
@@ -385,8 +427,6 @@ int main(void) {
 	glDepthFunc(GL_LESS);
 
 	// Block creation
-	std::vector<Chunk> chunks;
-
 	for (int cZ = 0; cZ < 4; cZ++) {
 		for (int cX = 0; cX < 4; cX++) {
 			Chunk chunk(cX * 16 * blockSize, 0, cZ * 16 * blockSize);
@@ -543,6 +583,7 @@ int main(void) {
 
 		// For each block in the chunk, apply a model transformation and draw it
 		for (Chunk chunk : chunks) {
+
 			for (const auto& block : chunk.blocks) {
 				int id = (block >> 12) & 0xFF;
 				if (id == 0) continue;
@@ -552,8 +593,6 @@ int main(void) {
 				int z = (block >> 20) & 0x0F;
 
 				glm::vec3 pos(glm::vec3(x * blockSize + chunk.posX, y * blockSize + chunk.posY, z * blockSize + chunk.posZ));
-
-				if (frustumCulling(block, pos, view, blockSize)) continue;
 
 				int left = 0;
 				int right = 0;
@@ -577,36 +616,31 @@ int main(void) {
 				GLuint colLoc = glGetUniformLocation(shaderProgram, "col");
 				glUniform3f(colLoc, wireframe, wireframe, wireframe);
 
-				if (left == 0) {
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesLeft), cubeIndicesLeft, GL_STATIC_DRAW);
-					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				std::vector<GLuint> combinedIndices;
+
+				if (left == 0 && !chunk.ignoreLeft) {
+					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesLeft), std::end(cubeIndicesLeft));
 				}
-				if (right == 0) {
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesRight), cubeIndicesRight, GL_STATIC_DRAW);
-					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				if (right == 0 && !chunk.ignoreRight) {
+					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesRight), std::end(cubeIndicesRight));
 				}
-				if (down == 0) {
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesBottom), cubeIndicesBottom, GL_STATIC_DRAW);
-					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				if (down == 0 && !chunk.ignoreDown) {
+					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
 				}
-				if (up == 0) {
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesTop), cubeIndicesTop, GL_STATIC_DRAW);
-					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				if (up == 0 && !chunk.ignoreUp) {
+					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop), std::end(cubeIndicesTop));
 				}
-				if (front == 0) {
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesFront), cubeIndicesFront, GL_STATIC_DRAW);
-					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				if (front == 0 && !chunk.ignoreFront) {
+					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesFront), std::end(cubeIndicesFront));
 				}
-				if (back == 0) {
-					glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-					glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesBack), cubeIndicesBack, GL_STATIC_DRAW);
-					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+				if (back == 0 && !chunk.ignoreBack) {
+					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBack), std::end(cubeIndicesBack));
 				}
+
+				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+				glBufferData(GL_ELEMENT_ARRAY_BUFFER, combinedIndices.size() * sizeof(GLuint), combinedIndices.data(), GL_STATIC_DRAW);
+
+				glDrawElements(GL_TRIANGLES, combinedIndices.size(), GL_UNSIGNED_INT, 0);
 			}
 		}
 
