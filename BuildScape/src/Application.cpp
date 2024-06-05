@@ -66,6 +66,8 @@ struct Chunk {
 	int posY;
 	int posZ;
 
+	bool empty = true;
+
 	bool ignoreLeft =	false;
 	bool ignoreRight =	false;
 	bool ignoreDown =	false;
@@ -75,6 +77,7 @@ struct Chunk {
 
 	void AddBlock(std::uint32_t block) {
 		blocks.push_back(block);
+		empty = false;
 	}
 
 	bool operator==(const Chunk& chunk) {
@@ -122,6 +125,7 @@ bool recording = false;
 float recordingTime = 10;
 float recordingTimer = 0;
 float recordCamSpeed = 3;
+int frameCounter = 0;
 bool uiCollapsed = false;
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -157,11 +161,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 
 GLuint VAO, VBO, EBO;
 
-const unsigned int cubeIndicesFront[] = {
-	0, 2, 3,
-	0, 3, 1
-};
-
 const unsigned int cubeIndicesLeft[] = {
 	4, 6, 2,
 	4, 2, 0
@@ -172,11 +171,6 @@ const unsigned int cubeIndicesRight[] = {
 	1, 7, 5
 };
 
-const unsigned int cubeIndicesBack[] = {
-	5, 7, 6,
-	5, 6, 4
-};
-
 const unsigned int cubeIndicesTop[] = {
 	2, 6, 7,
 	2, 7, 3
@@ -185,6 +179,16 @@ const unsigned int cubeIndicesTop[] = {
 const unsigned int cubeIndicesBottom[] = {
 	4, 0, 1,
 	4, 1, 5
+};
+
+const unsigned int cubeIndicesFront[] = {
+	0, 2, 3,
+	0, 3, 1
+};
+
+const unsigned int cubeIndicesBack[] = {
+	4, 6, 7,
+	4, 7, 5
 };
 
 int isNeighborPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {
@@ -246,27 +250,32 @@ void internalFaceCulling(Chunk& chunk) {
     }
 }
 
+bool checkCurrentChunk = true;
+
 // Input
 void processInput(GLFWwindow* window) {
-	bool checkCurrentChunk = false;
-
 	// Reset
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 		cameraPos = normalPos;
 		cameraFront = normalFront;
 		cameraUp = normalUp;
+
+		checkCurrentChunk = true;
 	}
 
 	// Virtual camera
 	if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
-		usingVirtualCamera = true;
 		virtualPos = cameraPos;
 		virtualFront = cameraFront;
 		virtualUp = cameraUp;
+
+		usingVirtualCamera = true;
 	}
 
 	if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
 		usingVirtualCamera = false;
+
+		checkCurrentChunk = true;
 	}
 
 	// Collapse
@@ -286,7 +295,10 @@ void processInput(GLFWwindow* window) {
 
 		recording = true;
 		recordingTimer = recordingTime;
+		frameCounter = 0;
+	}
 
+	if (recording) {
 		checkCurrentChunk = true;
 	}
 
@@ -308,63 +320,71 @@ void processInput(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
 		cameraPos += cameraSpeed * cameraFront;
 
-		checkCurrentChunk = true;
+		if (!usingVirtualCamera) checkCurrentChunk = true;
 	}
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
 		cameraPos -= cameraSpeed * cameraFront;
 
-		checkCurrentChunk = true;
+		if (!usingVirtualCamera) checkCurrentChunk = true;
 	}
 
 	// Left and right
 	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
 		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 
-		checkCurrentChunk = true;
+		if (!usingVirtualCamera) checkCurrentChunk = true;
 	}
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
 		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 
-		checkCurrentChunk = true;
+		if (!usingVirtualCamera) checkCurrentChunk = true;
 	}
 
 	// Up and down
 	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
 		cameraPos += glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), cameraFront)) * cameraSpeed;
 
-		checkCurrentChunk = true;
+		if (!usingVirtualCamera) checkCurrentChunk = true;
 	}
 	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
 		cameraPos -= glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), cameraFront)) * cameraSpeed;
 
-		checkCurrentChunk = true;
+		if (!usingVirtualCamera) checkCurrentChunk = true;
 	}
 
 	if (checkCurrentChunk && BACK_FACE_CULLING) {
+		checkCurrentChunk = false;
 		glm::vec3 pos = usingVirtualCamera ? virtualPos : cameraPos;
 
 		for (Chunk& chunk : chunks) {
-			if (pos.x > chunk.posX * 16 * blockSize && pos.x < (chunk.posX + 1) * 16 * blockSize &&
-				pos.y > chunk.posY * 16 * blockSize && pos.y < (chunk.posY + 1) * 16 * blockSize &&
-				pos.z > chunk.posZ * 16 * blockSize && pos.z < (chunk.posZ + 1) * 16 * blockSize) {
+			if (pos.x > chunk.posX && pos.x < chunk.posX + 16 * blockSize &&
+				pos.y > chunk.posY && pos.y < chunk.posY + 16 * blockSize &&
+				pos.z > chunk.posZ && pos.z < chunk.posZ + 16 * blockSize) {
 
 				glm::vec3 newClosest(chunk.posX, chunk.posY, chunk.posZ);
-
-				std::cout << newClosest.x << " " << newClosest.y << " " << newClosest.z << " | " 
-					<< closestChunkPos.x << " " << closestChunkPos.y << " " << closestChunkPos.z << std::endl;
 
 				if (newClosest != closestChunkPos) {
 					closestChunkPos = newClosest;
 
-					for (int i = 0; i < chunks.size(); i++) {
-						if (chunks[i].posX < closestChunkPos.x * 16 * blockSize) chunks[i].ignoreLeft = true;
-						if (chunks[i].posX > closestChunkPos.x * 16 * blockSize) chunks[i].ignoreRight = true;
-						if (chunks[i].posY < closestChunkPos.y * 16 * blockSize) chunks[i].ignoreDown = true;
-						if (chunks[i].posY > closestChunkPos.y * 16 * blockSize) chunks[i].ignoreUp = true;
-						if (chunks[i].posZ < closestChunkPos.z * 16 * blockSize) chunks[i].ignoreBack = true;
-						if (chunks[i].posZ > closestChunkPos.z * 16 * blockSize) chunks[i].ignoreFront = true;
+					chunk.ignoreRight = false;
+					chunk.ignoreLeft = false;
+					chunk.ignoreUp = false;
+					chunk.ignoreDown = false;
+					chunk.ignoreFront = false;
+					chunk.ignoreBack = false;
+
+					for (Chunk& chunkCopy : chunks) {
+						if (glm::vec3(chunkCopy.posX, chunkCopy.posY, chunkCopy.posZ) == closestChunkPos || chunkCopy.empty) continue;
+
+						chunkCopy.ignoreLeft =	chunkCopy.posX < closestChunkPos.x;
+						chunkCopy.ignoreRight = chunkCopy.posX > closestChunkPos.x;
+						chunkCopy.ignoreDown =	chunkCopy.posY < closestChunkPos.y;
+						chunkCopy.ignoreUp =	chunkCopy.posY > closestChunkPos.y;
+						chunkCopy.ignoreBack =	chunkCopy.posZ > closestChunkPos.z;
+						chunkCopy.ignoreFront = chunkCopy.posZ < closestChunkPos.z;
 					}
 				}
+
 				break;
 			}
 		}
@@ -427,34 +447,39 @@ int main(void) {
 	glDepthFunc(GL_LESS);
 
 	// Block creation
-	for (int cZ = 0; cZ < 4; cZ++) {
-		for (int cX = 0; cX < 4; cX++) {
-			Chunk chunk(cX * 16 * blockSize, 0, cZ * 16 * blockSize);
+	for (int cZ = -6; cZ < 6; cZ++) {
+		for (int cY = -4; cY < 5; cY++) {
+			for (int cX = -6; cX < 6; cX++) {
+				Chunk chunk(cX * 16 * blockSize, cY * 16 * blockSize, cZ * 16 * blockSize);
 
-			for (int y = 0; y < 16; y++) {
-				for (int z = 0; z < 16; z++) {
-					for (int x = 0; x < 16; x++) {
-						std::uint32_t block = 0;
+				if (cY == 0 && cX > -2 && cX < 3 && cZ > -2 && cZ < 3) {
+					for (int y = 0; y < 16; y++) {
+						for (int z = 0; z < 16; z++) {
+							for (int x = 0; x < 16; x++) {
+								std::uint32_t block = 0;
 
-						// Position
-						block |= (x << 28);
-						block |= (y << 24);
-						block |= (z << 20);
+								// Position
+								block |= (x << 28);
+								block |= (y << 24);
+								block |= (z << 20);
 
-						// ID
-						int air = 0;
-						if (y < test - 1) air = 1;
-						if (y == test - 1) air = random(0, 1);
+								// ID
+								int air = 0;
+								if (y < test - 1) air = 1;
+								if (y == test - 1) air = random(0, 1);
 
-						block |= (air << 12);
+								block |= (air << 12);
 
-						chunk.AddBlock(block);
+								chunk.AddBlock(block);
+							}
+						}
 					}
-				}
-			}
 
-			if (INTERNAL_FACE_CULLING) internalFaceCulling(chunk);
-			chunks.push_back(chunk);
+					if (INTERNAL_FACE_CULLING) internalFaceCulling(chunk);
+				}
+
+				chunks.push_back(chunk);
+			}
 		}
 	}
 
@@ -553,12 +578,13 @@ int main(void) {
 		processInput(window);
 
 		if (recording) {
-			float ms = 1000.0f / ImGui::GetIO().Framerate;
-			std::cout << ms << std::endl;
-
 			recordingTimer -= deltaTime;
-			if (recordingTimer <= 0)
+			frameCounter++;
+
+			if (recordingTimer <= 0) {
 				recording = false;
+				std::cout << "Amount of frames: " << frameCounter << std::endl;
+			}
 
 			cameraPos += glm::vec3(deltaTime * recordCamSpeed, 0.0f, deltaTime * recordCamSpeed);
 		}
@@ -583,6 +609,7 @@ int main(void) {
 
 		// For each block in the chunk, apply a model transformation and draw it
 		for (Chunk chunk : chunks) {
+			if (chunk.empty) continue;
 
 			for (const auto& block : chunk.blocks) {
 				int id = (block >> 12) & 0xFF;
@@ -624,11 +651,11 @@ int main(void) {
 				if (right == 0 && !chunk.ignoreRight) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesRight), std::end(cubeIndicesRight));
 				}
-				if (down == 0 && !chunk.ignoreDown) {
-					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
-				}
 				if (up == 0 && !chunk.ignoreUp) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop), std::end(cubeIndicesTop));
+				}
+				if (down == 0 && !chunk.ignoreDown) {
+					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
 				}
 				if (front == 0 && !chunk.ignoreFront) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesFront), std::end(cubeIndicesFront));
