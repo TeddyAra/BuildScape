@@ -15,6 +15,32 @@
 #include <cstdint>
 #include <random>
 
+#include "Input.h"
+#include "Camera.h"
+#include "Chunk.h"
+
+// unsigned 32 bit int, 26/32
+// 
+// x position   = 4 bits
+// y position   = 4 bits
+// z position   = 4 bits
+// id			= 8 bits
+// face up		= 1 bit
+// face down	= 1 bit
+// face right	= 1 bit
+// face left	= 1 bit
+// face front	= 1 bit
+// face back	= 1 bit
+//
+// 1 bit  = 0x01 = 0 -   1
+// 2 bits = 0x03 = 0 -   3
+// 3 bits = 0x07 = 0 -   7
+// 4 bits = 0x0F = 0 -  15
+// 5 bits = 0x1F = 0 -  31
+// 6 bits = 0x3F = 0 -  63
+// 7 bits = 0x7F = 0 - 127
+// 8 bits = 0xFF = 0 - 255
+
 const bool INTERNAL_FACE_CULLING = true;
 const bool BACK_FACE_CULLING = true;
 
@@ -29,95 +55,15 @@ int random(int min, int max) {
 	return (int)num(gen);
 }
 
-struct Chunk {
-	// unsigned 32 bit int, 26/32
-	// 
-	// x position   = 4 bits
-	// y position   = 4 bits
-	// z position   = 4 bits
-	// id			= 8 bits
-	// face up		= 1 bit
-	// face down	= 1 bit
-	// face right	= 1 bit
-	// face left	= 1 bit
-	// face front	= 1 bit
-	// face back	= 1 bit
-	//
-	// 1 bit  = 0x01 = 0 -   1
-	// 2 bits = 0x03 = 0 -   3
-	// 3 bits = 0x07 = 0 -   7
-	// 4 bits = 0x0F = 0 -  15
-	// 5 bits = 0x1F = 0 -  31
-	// 6 bits = 0x3F = 0 -  63
-	// 7 bits = 0x7F = 0 - 127
-	// 8 bits = 0xFF = 0 - 255
-
-	Chunk(int x, int y, int z) {
-		posX = x;
-		posY = y;
-		posZ = z;
-	}
-
-	// Blocks in chunk
-	std::vector<std::uint32_t> blocks;
-
-	// Chunk position
-	int posX;
-	int posY;
-	int posZ;
-
-	bool empty = true;
-
-	bool ignoreLeft =	false;
-	bool ignoreRight =	false;
-	bool ignoreDown =	false;
-	bool ignoreUp =		false;
-	bool ignoreFront =	false;
-	bool ignoreBack =	false;
-
-	void AddBlock(std::uint32_t block) {
-		blocks.push_back(block);
-		empty = false;
-	}
-
-	bool operator==(const Chunk& chunk) {
-		return (posX == chunk.posX &&
-				posY == chunk.posY &&
-				posZ == chunk.posZ);
-	}
-
-	bool operator!=(const Chunk& chunk) {
-		return (posX != chunk.posX ||
-				posY != chunk.posY ||
-				posZ != chunk.posZ);
-	}
-};
-
-std::vector<Chunk> chunks;
-
 // Camera
 glm::vec3 normalPos = glm::vec3(-2.0f, 8.0f, -2.0f);
 glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
 glm::vec3 normalUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-glm::vec3 cameraPos = normalPos;
-glm::vec3 cameraFront = normalFront;
-glm::vec3 cameraUp = normalUp;
-
-glm::vec3 virtualPos;
-glm::vec3 virtualFront;
-glm::vec3 virtualUp;
-bool usingVirtualCamera;
-
 glm::vec3 closestChunkPos;
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
-
-float yaw = -90.0f;
-float pitch = 0.0f;
-float lastX = 400;
-float lastY = 300;
 bool firstMouse = true;
 
 int wireframe = 0;
@@ -127,37 +73,6 @@ float recordingTimer = 0;
 float recordCamSpeed = 3;
 int frameCounter = 0;
 bool uiCollapsed = false;
-
-void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-	if (firstMouse) {
-		lastX = xpos;
-		lastY = ypos;
-		firstMouse = false;
-	}
-
-	float xoffset = xpos - lastX;
-	float yoffset = lastY - ypos; 
-	lastX = xpos;
-	lastY = ypos;
-
-	float sensitivity = 0.1f;
-	xoffset *= sensitivity;
-	yoffset *= sensitivity;
-
-	yaw += xoffset;
-	pitch += yoffset;
-
-	if (pitch > 89.0f)
-		pitch = 89.0f;
-	if (pitch < -89.0f)
-		pitch = -89.0f;
-
-	glm::vec3 front;
-	front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-	front.y = sin(glm::radians(pitch));
-	front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-	cameraFront = glm::normalize(front);
-}
 
 GLuint VAO, VBO, EBO;
 
@@ -229,8 +144,8 @@ int isNeighborPresent(const std::vector<std::uint32_t>& blocks, int index, int d
 	return id == 0 ? 0 : 1;
 }
 
-void internalFaceCulling(Chunk& chunk) {
-    std::vector<std::uint32_t>& blocks = chunk.blocks;
+void internalFaceCulling(Chunk& pChunk) {
+    std::vector<std::uint32_t>& blocks = pChunk.getBlocks();
 
     for (size_t i = 0; i < blocks.size(); ++i) {
         std::uint32_t block = blocks[i];
@@ -252,46 +167,73 @@ void internalFaceCulling(Chunk& chunk) {
 
 bool checkCurrentChunk = true;
 
+Camera camera(normalPos, normalFront, normalUp, 1.0f, 45.0f, 1.0f);
+
+void checkChunk() {
+	checkCurrentChunk = false;
+	glm::vec3 pos = camera.getLocked() ? camera.getLockedPosition() : camera.getPosition();
+
+	for (Chunk& chunk : chunks) {
+		if (pos.x > chunk.getPosition().x && pos.x < chunk.getPosition().x + 16 * blockSize &&
+			pos.y > chunk.getPosition().y && pos.y < chunk.getPosition().y + 16 * blockSize &&
+			pos.z > chunk.getPosition().z && pos.z < chunk.getPosition().z + 16 * blockSize) {
+
+			glm::vec3 newClosest = chunk.getPosition();
+
+			if (newClosest != closestChunkPos) {
+				closestChunkPos = newClosest;
+
+				chunk.setIgnoreRight(false);
+				chunk.setIgnoreLeft(false);
+				chunk.setIgnoreUp(false);
+				chunk.setIgnoreDown(false);
+				chunk.setIgnoreFront(false);
+				chunk.setIgnoreBack(false);
+
+				for (Chunk& chunkCopy : chunks) {
+					if (chunk.getPosition() == closestChunkPos || chunkCopy.isEmpty()) continue;
+
+					chunkCopy.setIgnoreLeft(chunkCopy.getPosition().x < closestChunkPos.x);
+					chunkCopy.setIgnoreRight(chunkCopy.getPosition().x > closestChunkPos.x);
+					chunkCopy.setIgnoreDown(chunkCopy.getPosition().y < closestChunkPos.y);
+					chunkCopy.setIgnoreUp(chunkCopy.getPosition().y > closestChunkPos.y);
+					chunkCopy.setIgnoreBack(chunkCopy.getPosition().z > closestChunkPos.z);
+					chunkCopy.setIgnoreFront(chunkCopy.getPosition().z < closestChunkPos.z);
+				}
+			}
+
+			break;
+		}
+	}
+}
+
 // Input
 void processInput(GLFWwindow* window) {
 	// Reset
-	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-		cameraPos = normalPos;
-		cameraFront = normalFront;
-		cameraUp = normalUp;
+	if (Input::getKey(GLFW_KEY_R)) {
+		camera.setPosition(normalPos);
+		camera.setFront(normalFront);
+		camera.setUp(normalUp);
 
 		checkCurrentChunk = true;
 	}
 
 	// Virtual camera
-	if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
-		virtualPos = cameraPos;
-		virtualFront = cameraFront;
-		virtualUp = cameraUp;
-
-		usingVirtualCamera = true;
-	}
-
-	if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
-		usingVirtualCamera = false;
-
+	if (Input::getKeyDown(GLFW_KEY_C)) {
+		camera.setLocked(!camera.getLocked());
 		checkCurrentChunk = true;
 	}
 
 	// Collapse
-	if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) {
-		uiCollapsed = true;
-	}
-
-	if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
-		uiCollapsed = false;
+	if (Input::getKeyDown(GLFW_KEY_Z)) {
+		uiCollapsed = !uiCollapsed;
 	}
 
 	// Record
-	if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS && !recording) {
-		cameraPos = normalPos;
-		cameraFront = normalFront;
-		cameraUp = normalUp;
+	if (Input::getKey(GLFW_KEY_F) && !recording) {
+		camera.setPosition(normalPos);
+		camera.setFront(normalFront);
+		camera.setUp(normalUp);
 
 		recording = true;
 		recordingTimer = recordingTime;
@@ -303,91 +245,58 @@ void processInput(GLFWwindow* window) {
 	}
 
 	// Render switch
-	if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
+	if (Input::getKey(GLFW_KEY_T)) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		wireframe = 1;
 	}
 
-	if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
+	if (Input::getKey(GLFW_KEY_G)) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 		wireframe = 0;
 	}
 
 	// Speed
-	float cameraSpeed = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? 10.0f : 5.0f) * deltaTime; 
+	float cameraSpeed = (Input::getKey(GLFW_KEY_LEFT_SHIFT) ? 10.0f : 5.0f) * deltaTime;
+	camera.setSpeed(cameraSpeed);
 
 	// Forward and backward
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-		cameraPos += cameraSpeed * cameraFront;
+	if (Input::getKey(GLFW_KEY_W)) {
+		camera.translate(camera.getFront());
 
-		if (!usingVirtualCamera) checkCurrentChunk = true;
+		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-		cameraPos -= cameraSpeed * cameraFront;
+	if (Input::getKey(GLFW_KEY_S)) {
+		camera.translate(-camera.getFront());
 
-		if (!usingVirtualCamera) checkCurrentChunk = true;
+		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
 
 	// Left and right
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+	if (Input::getKey(GLFW_KEY_A)) {
+		camera.translate(-camera.getRight());
 
-		if (!usingVirtualCamera) checkCurrentChunk = true;
+		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+	if (Input::getKey(GLFW_KEY_D)) {
+		camera.translate(camera.getRight());
 
-		if (!usingVirtualCamera) checkCurrentChunk = true;
+		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
 
 	// Up and down
-	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-		cameraPos += glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), cameraFront)) * cameraSpeed;
+	if (Input::getKey(GLFW_KEY_E)) {
+		camera.translate(camera.getRelativeUp());
 
-		if (!usingVirtualCamera) checkCurrentChunk = true;
+		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
-	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
-		cameraPos -= glm::normalize(glm::cross(glm::cross(cameraFront, cameraUp), cameraFront)) * cameraSpeed;
+	if (Input::getKey(GLFW_KEY_Q)) {
+		camera.translate(-camera.getRelativeUp());
 
-		if (!usingVirtualCamera) checkCurrentChunk = true;
+		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
 
 	if (checkCurrentChunk && BACK_FACE_CULLING) {
-		checkCurrentChunk = false;
-		glm::vec3 pos = usingVirtualCamera ? virtualPos : cameraPos;
-
-		for (Chunk& chunk : chunks) {
-			if (pos.x > chunk.posX && pos.x < chunk.posX + 16 * blockSize &&
-				pos.y > chunk.posY && pos.y < chunk.posY + 16 * blockSize &&
-				pos.z > chunk.posZ && pos.z < chunk.posZ + 16 * blockSize) {
-
-				glm::vec3 newClosest(chunk.posX, chunk.posY, chunk.posZ);
-
-				if (newClosest != closestChunkPos) {
-					closestChunkPos = newClosest;
-
-					chunk.ignoreRight = false;
-					chunk.ignoreLeft = false;
-					chunk.ignoreUp = false;
-					chunk.ignoreDown = false;
-					chunk.ignoreFront = false;
-					chunk.ignoreBack = false;
-
-					for (Chunk& chunkCopy : chunks) {
-						if (glm::vec3(chunkCopy.posX, chunkCopy.posY, chunkCopy.posZ) == closestChunkPos || chunkCopy.empty) continue;
-
-						chunkCopy.ignoreLeft =	chunkCopy.posX < closestChunkPos.x;
-						chunkCopy.ignoreRight = chunkCopy.posX > closestChunkPos.x;
-						chunkCopy.ignoreDown =	chunkCopy.posY < closestChunkPos.y;
-						chunkCopy.ignoreUp =	chunkCopy.posY > closestChunkPos.y;
-						chunkCopy.ignoreBack =	chunkCopy.posZ > closestChunkPos.z;
-						chunkCopy.ignoreFront = chunkCopy.posZ < closestChunkPos.z;
-					}
-				}
-
-				break;
-			}
-		}
+		checkChunk();
 	}
 }
 
@@ -427,10 +336,11 @@ int main(void) {
 		glfwTerminate();
 		return -1;
 	}
+	Input::setWindow(window);
 
 	glfwMakeContextCurrent(window);
 	//glfwSwapInterval(1);
-	glfwSetCursorPosCallback(window, mouse_callback);
+	glfwSetCursorPosCallback(window, Input::mouseCallback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Initialize glew
@@ -470,7 +380,7 @@ int main(void) {
 
 								block |= (air << 12);
 
-								chunk.AddBlock(block);
+								chunk.addBlock(block);
 							}
 						}
 					}
@@ -566,8 +476,8 @@ int main(void) {
 
 	// MVP
 	glm::mat4 model = glm::mat4(1.0f);
-	glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-	glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
+	glm::mat4 view;
+	glm::mat4 projection = glm::perspective(glm::radians(camera.getFov()), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
 
 	// Game loop
 	while (!glfwWindowShouldClose(window)) {
@@ -576,6 +486,7 @@ int main(void) {
 		lastFrame = currentFrame;
 
 		processInput(window);
+		camera.update(deltaTime);
 
 		if (recording) {
 			recordingTimer -= deltaTime;
@@ -586,7 +497,7 @@ int main(void) {
 				std::cout << "Amount of frames: " << frameCounter << std::endl;
 			}
 
-			cameraPos += glm::vec3(deltaTime * recordCamSpeed, 0.0f, deltaTime * recordCamSpeed);
+			camera.translate(glm::vec3(deltaTime * recordCamSpeed, 0.0f, deltaTime * recordCamSpeed));
 		}
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -600,7 +511,7 @@ int main(void) {
 
 		glUniform1i(wireLoc, wireframe);
 
-		view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		view = camera.getViewMatrix();
 		
 		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
@@ -609,9 +520,9 @@ int main(void) {
 
 		// For each block in the chunk, apply a model transformation and draw it
 		for (Chunk chunk : chunks) {
-			if (chunk.empty) continue;
+			if (chunk.isEmpty()) continue;
 
-			for (const auto& block : chunk.blocks) {
+			for (const auto& block : chunk.getBlocks()) {
 				int id = (block >> 12) & 0xFF;
 				if (id == 0) continue;
 
@@ -619,7 +530,7 @@ int main(void) {
 				int y = (block >> 24) & 0x0F;
 				int z = (block >> 20) & 0x0F;
 
-				glm::vec3 pos(glm::vec3(x * blockSize + chunk.posX, y * blockSize + chunk.posY, z * blockSize + chunk.posZ));
+				glm::vec3 pos(glm::vec3(x * blockSize, y * blockSize, z * blockSize) * chunk.getPosition());
 
 				int left = 0;
 				int right = 0;
@@ -645,22 +556,22 @@ int main(void) {
 
 				std::vector<GLuint> combinedIndices;
 
-				if (left == 0 && !chunk.ignoreLeft) {
+				if (left == 0 && !chunk.getIgnoreLeft()) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesLeft), std::end(cubeIndicesLeft));
 				}
-				if (right == 0 && !chunk.ignoreRight) {
+				if (right == 0 && !chunk.getIgnoreRight()) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesRight), std::end(cubeIndicesRight));
 				}
-				if (up == 0 && !chunk.ignoreUp) {
+				if (up == 0 && !chunk.getIgnoreUp()) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop), std::end(cubeIndicesTop));
 				}
-				if (down == 0 && !chunk.ignoreDown) {
+				if (down == 0 && !chunk.getIgnoreDown()) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
 				}
-				if (front == 0 && !chunk.ignoreFront) {
+				if (front == 0 && !chunk.getIgnoreFront()) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesFront), std::end(cubeIndicesFront));
 				}
-				if (back == 0 && !chunk.ignoreBack) {
+				if (back == 0 && !chunk.getIgnoreBack()) {
 					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBack), std::end(cubeIndicesBack));
 				}
 
@@ -685,14 +596,14 @@ int main(void) {
 
 		ImGui::Begin("Debug information", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
 		if (uiCollapsed) {
-			ImGui::Text("[X] Uncollapse the UI");
+			ImGui::Text("[Z] Uncollapse the UI");
 		} else {
 			ImGui::Text("[Z] Collapse the UI");
 			ImGui::Text("[R] Reset the camera position");
 			ImGui::Text("[F] Start recording the performance");
 			ImGui::Text("[T] Look at the wireframes of the voxels");
 			ImGui::Text("[G] Look at the triangles of the voxels");
-			ImGui::Text(usingVirtualCamera ? "[V] Turn virtual camera off" : "[C] Turn virtual camera on");
+			ImGui::Text(camera.getLocked() ? "[C] Turn locked camera off" : "[C] Turn locked camera on");
 			ImGui::Text("");
 			ImGui::Text("[WASDQE] Move the camera");
 			ImGui::Text("[Mouse] Look around");
@@ -708,6 +619,7 @@ int main(void) {
 		ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
 
 		glfwSwapBuffers(window);
+		Input::update();
 
 		glfwPollEvents();
 	}
