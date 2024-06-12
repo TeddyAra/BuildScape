@@ -13,11 +13,11 @@
 #include <vector>
 #include <stdint.h>
 #include <cstdint>
-#include <random>
 
 #include "Input.h"
 #include "Camera.h"
 #include "Chunk.h"
+#include "World.h"
 
 // unsigned 32 bit int, 26/32
 // 
@@ -44,23 +44,15 @@
 const bool INTERNAL_FACE_CULLING = true;
 const bool BACK_FACE_CULLING = true;
 
-float blockSize = 0.5f;
-
-// Random number generator
-std::random_device rd;
-std::mt19937 gen(rd());
-
-int random(int min, int max) {
-	std::uniform_int_distribution<> num(min, max);
-	return (int)num(gen);
-}
+float voxelSize = 0.5f;
 
 // Camera
 glm::vec3 normalPos = glm::vec3(-2.0f, 8.0f, -2.0f);
 glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
 glm::vec3 normalUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-glm::vec3 closestChunkPos;
+Camera camera(normalPos, normalFront, normalUp, 1.0f, 45.0f, 1.0f);
+World world(voxelSize, 4, &camera);
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -167,46 +159,6 @@ void internalFaceCulling(Chunk& pChunk) {
 
 bool checkCurrentChunk = true;
 
-Camera camera(normalPos, normalFront, normalUp, 1.0f, 45.0f, 1.0f);
-
-void checkChunk() {
-	checkCurrentChunk = false;
-	glm::vec3 pos = camera.getLocked() ? camera.getLockedPosition() : camera.getPosition();
-
-	for (Chunk& chunk : chunks) {
-		if (pos.x > chunk.getPosition().x && pos.x < chunk.getPosition().x + 16 * blockSize &&
-			pos.y > chunk.getPosition().y && pos.y < chunk.getPosition().y + 16 * blockSize &&
-			pos.z > chunk.getPosition().z && pos.z < chunk.getPosition().z + 16 * blockSize) {
-
-			glm::vec3 newClosest = chunk.getPosition();
-
-			if (newClosest != closestChunkPos) {
-				closestChunkPos = newClosest;
-
-				chunk.setIgnoreRight(false);
-				chunk.setIgnoreLeft(false);
-				chunk.setIgnoreUp(false);
-				chunk.setIgnoreDown(false);
-				chunk.setIgnoreFront(false);
-				chunk.setIgnoreBack(false);
-
-				for (Chunk& chunkCopy : chunks) {
-					if (chunk.getPosition() == closestChunkPos || chunkCopy.isEmpty()) continue;
-
-					chunkCopy.setIgnoreLeft(chunkCopy.getPosition().x < closestChunkPos.x);
-					chunkCopy.setIgnoreRight(chunkCopy.getPosition().x > closestChunkPos.x);
-					chunkCopy.setIgnoreDown(chunkCopy.getPosition().y < closestChunkPos.y);
-					chunkCopy.setIgnoreUp(chunkCopy.getPosition().y > closestChunkPos.y);
-					chunkCopy.setIgnoreBack(chunkCopy.getPosition().z > closestChunkPos.z);
-					chunkCopy.setIgnoreFront(chunkCopy.getPosition().z < closestChunkPos.z);
-				}
-			}
-
-			break;
-		}
-	}
-}
-
 // Input
 void processInput(GLFWwindow* window) {
 	// Reset
@@ -245,14 +197,14 @@ void processInput(GLFWwindow* window) {
 	}
 
 	// Render switch
-	if (Input::getKey(GLFW_KEY_T)) {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		wireframe = 1;
-	}
-
-	if (Input::getKey(GLFW_KEY_G)) {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		wireframe = 0;
+	if (Input::getKeyDown(GLFW_KEY_T)) {
+		if (wireframe == 0) {
+			glPolygonMode(GL_FRONT, GL_LINE);
+			wireframe = 1;
+		} else {
+			glPolygonMode(GL_FRONT, GL_FILL);
+			wireframe = 0;
+		}
 	}
 
 	// Speed
@@ -296,7 +248,7 @@ void processInput(GLFWwindow* window) {
 	}
 
 	if (checkCurrentChunk && BACK_FACE_CULLING) {
-		checkChunk();
+		world.checkChunk();
 	}
 }
 
@@ -312,7 +264,7 @@ int main(void) {
 	// Game variables
 	int test = 4;
 
-	float verDist = blockSize / 2;
+	float verDist = voxelSize / 2;
 	const float cubeVertices[] = {
 		-verDist, -verDist, -verDist,
 		 verDist, -verDist, -verDist,
@@ -356,42 +308,7 @@ int main(void) {
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
-	// Block creation
-	for (int cZ = -6; cZ < 6; cZ++) {
-		for (int cY = -4; cY < 5; cY++) {
-			for (int cX = -6; cX < 6; cX++) {
-				Chunk chunk(cX * 16 * blockSize, cY * 16 * blockSize, cZ * 16 * blockSize);
-
-				if (cY == 0 && cX > -2 && cX < 3 && cZ > -2 && cZ < 3) {
-					for (int y = 0; y < 16; y++) {
-						for (int z = 0; z < 16; z++) {
-							for (int x = 0; x < 16; x++) {
-								std::uint32_t block = 0;
-
-								// Position
-								block |= (x << 28);
-								block |= (y << 24);
-								block |= (z << 20);
-
-								// ID
-								int air = 0;
-								if (y < test - 1) air = 1;
-								if (y == test - 1) air = random(0, 1);
-
-								block |= (air << 12);
-
-								chunk.addBlock(block);
-							}
-						}
-					}
-
-					if (INTERNAL_FACE_CULLING) internalFaceCulling(chunk);
-				}
-
-				chunks.push_back(chunk);
-			}
-		}
-	}
+	world.generate();
 
 	ImGui::CreateContext();
 	ImGui_ImplGlfwGL3_Init(window, true);
@@ -475,7 +392,7 @@ int main(void) {
 	glDeleteShader(fragmentShader);
 
 	// MVP
-	glm::mat4 model = glm::mat4(1.0f);
+	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 projection = glm::perspective(glm::radians(camera.getFov()), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
 
@@ -519,7 +436,7 @@ int main(void) {
 		glBindVertexArray(VAO);
 
 		// For each block in the chunk, apply a model transformation and draw it
-		for (Chunk chunk : chunks) {
+		for (Chunk chunk : world.getChunks()) {
 			if (chunk.isEmpty()) continue;
 
 			for (const auto& block : chunk.getBlocks()) {
@@ -530,7 +447,7 @@ int main(void) {
 				int y = (block >> 24) & 0x0F;
 				int z = (block >> 20) & 0x0F;
 
-				glm::vec3 pos(glm::vec3(x * blockSize, y * blockSize, z * blockSize) * chunk.getPosition());
+				glm::vec3 pos(glm::vec3(x * voxelSize, y * voxelSize, z * voxelSize) + chunk.getPosition());
 
 				int left = 0;
 				int right = 0;

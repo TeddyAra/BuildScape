@@ -74,6 +74,10 @@ bool Chunk::getIgnoreBack() {
 	return ignoreBack;
 }
 
+void Chunk::setEmpty(bool pEmpty) {
+	empty = pEmpty;
+}
+
 bool Chunk::isEmpty() {
 	return empty;
 }

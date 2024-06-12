@@ -29,6 +29,7 @@ public:
 	bool getIgnoreFront();
 	bool getIgnoreBack();
 
+	void setEmpty(bool pEmpty);
 	bool isEmpty();
 	std::vector<std::uint32_t>& getBlocks();
 
