@@ -41,8 +41,8 @@
 // 7 bits = 0x7F = 0 - 127
 // 8 bits = 0xFF = 0 - 255
 
-const bool INTERNAL_FACE_CULLING = true;
-const bool BACK_FACE_CULLING = true;
+/*const bool INTERNAL_FACE_CULLING = true;
+const bool BACK_FACE_CULLING = true;*/
 
 float voxelSize = 0.5f;
 
@@ -97,65 +97,6 @@ const unsigned int cubeIndicesBack[] = {
 	4, 6, 7,
 	4, 7, 5
 };
-
-int isNeighborPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {
-	std::uint32_t block = blocks[index];
-	int x = (block >> 28) & 0x0F;
-	int y = (block >> 24) & 0x0F;
-	int z = (block >> 20) & 0x0F;
-
-	switch (dir) {
-	case 0: // Left
-		if (x == 0) return 0;
-		index -= 1;
-		break;
-	case 1: // Right
-		if (x == 15) return 0;
-		index += 1;
-		break;
-	case 2: // Down
-		if (y == 0) return 0;
-		index -= 256;
-		break;
-	case 3: // Up
-		if (y == 15) return 0;
-		index += 256;
-		break;
-	case 4: // Front
-		if (z == 0) return 0;
-		index -= 16;
-		break;
-	case 5: // Back
-		if (z == 15) return 0;
-		index += 16;
-		break;
-	}
-
-	block = blocks[index];
-	int id = (block >> 12) & 0xFF;
-	return id == 0 ? 0 : 1;
-}
-
-void internalFaceCulling(Chunk& pChunk) {
-    std::vector<std::uint32_t>& blocks = pChunk.getBlocks();
-
-    for (size_t i = 0; i < blocks.size(); ++i) {
-        std::uint32_t block = blocks[i];
-        int id = (block >> 12) & 0xFF;
-        if (id == 0) continue;
-
-        std::uint32_t blockCopy = block;
-
-        blockCopy &= ~(0x3F << 6); 
-        for (int j = 0; j < 6; ++j) {
-            if (isNeighborPresent(blocks, i, j)) {
-                blockCopy |= (1 << (11 - j));
-            }
-        }
-
-        blocks[i] = blockCopy;
-    }
-}
 
 bool checkCurrentChunk = true;
 
@@ -247,7 +188,7 @@ void processInput(GLFWwindow* window) {
 		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
 
-	if (checkCurrentChunk && BACK_FACE_CULLING) {
+	if (checkCurrentChunk) {
 		world.checkChunk();
 	}
 }
@@ -309,6 +250,7 @@ int main(void) {
 	glDepthFunc(GL_LESS);
 
 	world.generate();
+	world.internalFaceCull();
 
 	ImGui::CreateContext();
 	ImGui_ImplGlfwGL3_Init(window, true);
@@ -435,7 +377,6 @@ int main(void) {
 
 		glBindVertexArray(VAO);
 
-		// For each block in the chunk, apply a model transformation and draw it
 		for (Chunk chunk : world.getChunks()) {
 			if (chunk.isEmpty()) continue;
 
@@ -456,7 +397,7 @@ int main(void) {
 				int front = 0;
 				int back = 0;
 
-				if (INTERNAL_FACE_CULLING) {
+				if (world.areInternalFacesCulled()) {
 					left = (block >> 11) & 0x01;
 					right = (block >> 10) & 0x01;
 					down = (block >> 9) & 0x01;

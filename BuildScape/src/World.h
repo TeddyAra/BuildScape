@@ -11,11 +11,13 @@ public:
 	~World();
 
 	void generate();
-	void cull();
 	void checkChunk();
 	void setCheckChunk(bool pCheck);
 	glm::vec3 getClosestChunkPosition();
 	std::vector<Chunk> getChunks();
+
+	void internalFaceCull();
+	bool areInternalFacesCulled();
 
 private:
 	std::vector<Chunk> chunks;
@@ -24,4 +26,7 @@ private:
 	glm::vec3 closestChunkPos;
 	float voxelSize;
 	int topLayer;
+	bool interalFacesCulled;
+
+	int isNeighbourPresent(const std::vector<std::uint32_t>& blocks, int index, int dir);
 };

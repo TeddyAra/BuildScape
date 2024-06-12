@@ -6,6 +6,7 @@ World::World(float pVoxelSize, int pTopLayer, Camera* pCamera)
 	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera)
 {
 	checkCurrentChunk = true;
+	interalFacesCulled = false;
 	closestChunkPos = glm::vec3(0, 0, 0);
 }
 
@@ -50,10 +51,6 @@ void World::generate() {
 			}
 		}
 	}
-}
-
-void World::cull() {
-	
 }
 
 void World::checkChunk() {
@@ -104,4 +101,70 @@ glm::vec3 World::getClosestChunkPosition() {
 
 std::vector<Chunk> World::getChunks() {
 	return chunks;
+}
+
+int World::isNeighbourPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {
+	std::uint32_t block = blocks[index];
+	int x = (block >> 28) & 0x0F;
+	int y = (block >> 24) & 0x0F;
+	int z = (block >> 20) & 0x0F;
+
+	switch (dir) {
+	case 0: // Left
+		if (x == 0) return 0;
+		index -= 1;
+		break;
+	case 1: // Right
+		if (x == 15) return 0;
+		index += 1;
+		break;
+	case 2: // Down
+		if (y == 0) return 0;
+		index -= 256;
+		break;
+	case 3: // Up
+		if (y == 15) return 0;
+		index += 256;
+		break;
+	case 4: // Front
+		if (z == 0) return 0;
+		index -= 16;
+		break;
+	case 5: // Back
+		if (z == 15) return 0;
+		index += 16;
+		break;
+	}
+
+	block = blocks[index];
+	int id = (block >> 12) & 0xFF;
+	return id == 0 ? 0 : 1;
+}
+
+void World::internalFaceCull() {
+	interalFacesCulled = true;
+	for (Chunk& chunk : chunks) {
+		std::vector<std::uint32_t>& blocks = chunk.getBlocks();
+
+		for (size_t i = 0; i < blocks.size(); ++i) {
+			std::uint32_t block = blocks[i];
+			int id = (block >> 12) & 0xFF;
+			if (id == 0) continue;
+
+			std::uint32_t blockCopy = block;
+
+			blockCopy &= ~(0x3F << 6);
+			for (int j = 0; j < 6; ++j) {
+				if (isNeighbourPresent(blocks, i, j)) {
+					blockCopy |= (1 << (11 - j));
+				}
+			}
+
+			blocks[i] = blockCopy;
+		}
+	}
+}
+
+bool World::areInternalFacesCulled() {
+	return interalFacesCulled;
 }
