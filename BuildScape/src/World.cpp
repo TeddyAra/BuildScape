@@ -1,9 +1,37 @@
 #include "World.h"
 
-#include "Random.h"
+const unsigned int cubeIndicesLeft[] = {
+	4, 6, 2,
+	4, 2, 0
+};
 
-World::World(float pVoxelSize, int pTopLayer, Camera* pCamera)
-	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera)
+const unsigned int cubeIndicesRight[] = {
+	1, 3, 7,
+	1, 7, 5
+};
+
+const unsigned int cubeIndicesTop[] = {
+	2, 6, 7,
+	2, 7, 3
+};
+
+const unsigned int cubeIndicesBottom[] = {
+	4, 0, 1,
+	4, 1, 5
+};
+
+const unsigned int cubeIndicesFront[] = {
+	0, 2, 3,
+	0, 3, 1
+};
+
+const unsigned int cubeIndicesBack[] = {
+	4, 6, 7,
+	4, 7, 5
+};
+
+World::World(float pVoxelSize, int pTopLayer, Camera* pCamera, Renderer* pRenderer)
+	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera), renderer(pRenderer)
 {
 	checkCurrentChunk = true;
 	interalFacesCulled = false;
@@ -101,6 +129,73 @@ glm::vec3 World::getClosestChunkPosition() {
 
 std::vector<Chunk> World::getChunks() {
 	return chunks;
+}
+
+void World::setShaderProgram(GLuint pShaderProgram) {
+	shaderProgram = pShaderProgram;
+}
+
+void World::setWireframeColour(int pColour) {
+	wireframe = pColour;
+}
+
+int World::getWireframeColour() {
+	return wireframe;
+}
+
+void World::draw() {
+	for (Chunk chunk : chunks) {
+		if (chunk.isEmpty()) continue;
+
+		for (const auto& block : chunk.getBlocks()) {
+			int id = (block >> 12) & 0xFF;
+			if (id == 0) continue;
+
+			int x = (block >> 28) & 0x0F;
+			int y = (block >> 24) & 0x0F;
+			int z = (block >> 20) & 0x0F;
+
+			glm::vec3 pos(glm::vec3(x * voxelSize, y * voxelSize, z * voxelSize) + chunk.getPosition());
+
+			int left = 0;
+			int right = 0;
+			int down = 0;
+			int up = 0;
+			int front = 0;
+			int back = 0;
+
+			if (interalFacesCulled) {
+				left = (block >> 11) & 0x01;
+				right = (block >> 10) & 0x01;
+				down = (block >> 9) & 0x01;
+				up = (block >> 8) & 0x01;
+				front = (block >> 7) & 0x01;
+				back = (block >> 6) & 0x01;
+			}
+
+			GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
+			glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
+			glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+			GLuint colLoc = glGetUniformLocation(shaderProgram, "col");
+			glUniform3f(colLoc, wireframe, wireframe, wireframe);
+
+			std::vector<GLuint> combinedIndices;
+
+			if (left == 0 && !chunk.getIgnoreLeft())   combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesLeft),   std::end(cubeIndicesLeft));
+			if (right == 0 && !chunk.getIgnoreRight()) combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesRight),  std::end(cubeIndicesRight));
+			if (up == 0 && !chunk.getIgnoreUp())       combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop),    std::end(cubeIndicesTop));
+			if (down == 0 && !chunk.getIgnoreDown())   combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
+			if (front == 0 && !chunk.getIgnoreFront()) combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesFront),  std::end(cubeIndicesFront));
+			if (back == 0 && !chunk.getIgnoreBack())   combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBack),   std::end(cubeIndicesBack));
+
+			renderer->bindEBO();
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, combinedIndices.size() * sizeof(GLuint), combinedIndices.data(), GL_STATIC_DRAW);
+
+			glDrawElements(GL_TRIANGLES, combinedIndices.size(), GL_UNSIGNED_INT, 0);
+			renderer->unbindEBO();
+		}
+	}
 }
 
 int World::isNeighbourPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {

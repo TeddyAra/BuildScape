@@ -6,9 +6,6 @@
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw_gl3.h"
-
 #include <iostream>
 #include <vector>
 #include <stdint.h>
@@ -18,6 +15,8 @@
 #include "Camera.h"
 #include "Chunk.h"
 #include "World.h"
+#include "Renderer.h"
+#include "Debug.h"
 
 // unsigned 32 bit int, 26/32
 // 
@@ -41,9 +40,13 @@
 // 7 bits = 0x7F = 0 - 127
 // 8 bits = 0xFF = 0 - 255
 
-/*const bool INTERNAL_FACE_CULLING = true;
-const bool BACK_FACE_CULLING = true;*/
+// Game information
+std::string windowName = "BuildScape";
+std::string gameVersion = "Alpha";
 
+// Window variables
+int windowWidth = 960;
+int windowHeight = 540;
 float voxelSize = 0.5f;
 
 // Camera
@@ -52,7 +55,9 @@ glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
 glm::vec3 normalUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 Camera camera(normalPos, normalFront, normalUp, 1.0f, 45.0f, 1.0f);
-World world(voxelSize, 4, &camera);
+Renderer renderer;
+World world(voxelSize, 4, &camera, &renderer);
+Debug debug("Debug window", 300, windowHeight);
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -65,8 +70,6 @@ float recordingTimer = 0;
 float recordCamSpeed = 3;
 int frameCounter = 0;
 bool uiCollapsed = false;
-
-GLuint VAO, VBO, EBO;
 
 const unsigned int cubeIndicesLeft[] = {
 	4, 6, 2,
@@ -120,6 +123,8 @@ void processInput(GLFWwindow* window) {
 	// Collapse
 	if (Input::getKeyDown(GLFW_KEY_Z)) {
 		uiCollapsed = !uiCollapsed;
+		debug.setCollapsed(uiCollapsed);
+		debug.setSize(uiCollapsed ? 200 : 300, uiCollapsed ? 100 : windowHeight);
 	}
 
 	// Record
@@ -194,18 +199,10 @@ void processInput(GLFWwindow* window) {
 }
 
 int main(void) {
-	// Game information
-	std::string windowName = "BuildScape";
-	std::string gameVersion = "Alpha";
-
-	// Window variables
-	int windowWidth = 960;
-	int windowHeight = 540;
-
 	// Game variables
 	int test = 4;
-
-	float verDist = voxelSize / 2;
+	float voxelSize = 0.5f;
+	float verDist = voxelSize / 2.0f;
 	const float cubeVertices[] = {
 		-verDist, -verDist, -verDist,
 		 verDist, -verDist, -verDist,
@@ -217,71 +214,29 @@ int main(void) {
 		 verDist,  verDist,  verDist
 	};
 
-	GLFWwindow* window;
+	int numVertices = sizeof(cubeVertices) / sizeof(cubeVertices[0]);
 
-	// Initialize glfw
-	if (!glfwInit())
+	if (renderer.initialize(windowWidth, windowHeight, std::string(windowName + " - " + gameVersion), cubeVertices, numVertices) == -1)
 		return -1;
 
-	// Create a window
-	window = glfwCreateWindow(windowWidth, windowHeight, std::string(windowName + " - " + gameVersion).c_str(), NULL, NULL);
-	if (!window) {
-		glfwTerminate();
-		return -1;
-	}
-	Input::setWindow(window);
+	GLFWwindow* window = renderer.getWindow();
 
-	glfwMakeContextCurrent(window);
-	//glfwSwapInterval(1);
-	glfwSetCursorPosCallback(window, Input::mouseCallback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	debug.initialize(window);
 
-	// Initialize glew
-	if (glewInit() != GLEW_OK) {
-		std::cout << "[ERROR] Initializing glew failed." << std::endl;
-	}
-
-	std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
+	debug.addLine("[Z] Collapse the UI");
+	debug.addLine("[R] Reset the camera position");
+	debug.addLine("[F] Start recording the performance");
+	debug.addLine("[T] Look at the wireframes of the voxels");
+	debug.addLine("[G] Look at the triangles of the voxels");
+	debug.addLine("[C] Toggle locked camera");
+	debug.addLine("");
+	debug.addLine("[WASDQE] Move the camera");
+	debug.addLine("[Mouse] Look around");
 
 	world.generate();
 	world.internalFaceCull();
 
-	ImGui::CreateContext();
-	ImGui_ImplGlfwGL3_Init(window, true);
-	ImGui::StyleColorsDark();
-
-	ImGuiStyle& style = ImGui::GetStyle();
-	ImVec4 titleColor = ImVec4(0.15f, 0.3f, 0.5f, 1.0f);
-
-	style.Colors[ImGuiCol_TitleBg] = titleColor;
-	style.Colors[ImGuiCol_TitleBgActive] = titleColor;
-	style.Colors[ImGuiCol_TitleBgCollapsed] = titleColor;
-
-	// Arrays
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
-
-	glBindVertexArray(VAO);
-
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndicesFront), cubeIndicesFront, GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindVertexArray(0);
-
-	// Shaders
+	// Shaders ----------------------------------------------------------------------------------------------------------------------------
 	const char* vertexShaderSource = R"(
 		#version 330 core
 		layout(location = 0) in vec3 aPos;
@@ -317,24 +272,13 @@ int main(void) {
 		}
 	)";
 
-	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
-	glCompileShader(vertexShader);
-
-	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
-	glCompileShader(fragmentShader);
-
-	GLuint shaderProgram = glCreateProgram();
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
-
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
+	GLuint vertexShader = renderer.setShader(vertexShaderSource, GL_VERTEX_SHADER);
+	GLuint fragmentShader = renderer.setShader(fragmentShaderSource, GL_FRAGMENT_SHADER);
+	GLuint shaderProgram = renderer.createShaderProgram(vertexShader, fragmentShader);
+	world.setShaderProgram(shaderProgram);
+	// ------------------------------------------------------------------------------------------------------------------------------------
 
 	// MVP
-	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 projection = glm::perspective(glm::radians(camera.getFov()), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
 
@@ -363,7 +307,6 @@ int main(void) {
 
 		glUseProgram(shaderProgram);
 
-		GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
 		GLuint viewLoc = glGetUniformLocation(shaderProgram, "view");
 		GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
 		GLuint wireLoc = glGetUniformLocation(shaderProgram, "wireframe");
@@ -375,106 +318,9 @@ int main(void) {
 		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-		glBindVertexArray(VAO);
+		world.draw();
 
-		for (Chunk chunk : world.getChunks()) {
-			if (chunk.isEmpty()) continue;
-
-			for (const auto& block : chunk.getBlocks()) {
-				int id = (block >> 12) & 0xFF;
-				if (id == 0) continue;
-
-				int x = (block >> 28) & 0x0F;
-				int y = (block >> 24) & 0x0F;
-				int z = (block >> 20) & 0x0F;
-
-				glm::vec3 pos(glm::vec3(x * voxelSize, y * voxelSize, z * voxelSize) + chunk.getPosition());
-
-				int left = 0;
-				int right = 0;
-				int down = 0;
-				int up = 0;
-				int front = 0;
-				int back = 0;
-
-				if (world.areInternalFacesCulled()) {
-					left = (block >> 11) & 0x01;
-					right = (block >> 10) & 0x01;
-					down = (block >> 9) & 0x01;
-					up = (block >> 8) & 0x01;
-					front = (block >> 7) & 0x01;
-					back = (block >> 6) & 0x01;
-				}
-
-				model = glm::translate(glm::mat4(1.0f), pos);
-				glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-				GLuint colLoc = glGetUniformLocation(shaderProgram, "col");
-				glUniform3f(colLoc, wireframe, wireframe, wireframe);
-
-				std::vector<GLuint> combinedIndices;
-
-				if (left == 0 && !chunk.getIgnoreLeft()) {
-					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesLeft), std::end(cubeIndicesLeft));
-				}
-				if (right == 0 && !chunk.getIgnoreRight()) {
-					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesRight), std::end(cubeIndicesRight));
-				}
-				if (up == 0 && !chunk.getIgnoreUp()) {
-					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop), std::end(cubeIndicesTop));
-				}
-				if (down == 0 && !chunk.getIgnoreDown()) {
-					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
-				}
-				if (front == 0 && !chunk.getIgnoreFront()) {
-					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesFront), std::end(cubeIndicesFront));
-				}
-				if (back == 0 && !chunk.getIgnoreBack()) {
-					combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBack), std::end(cubeIndicesBack));
-				}
-
-				glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-				glBufferData(GL_ELEMENT_ARRAY_BUFFER, combinedIndices.size() * sizeof(GLuint), combinedIndices.data(), GL_STATIC_DRAW);
-
-				glDrawElements(GL_TRIANGLES, combinedIndices.size(), GL_UNSIGNED_INT, 0);
-			}
-		}
-
-		glBindVertexArray(0);
-
-		ImGui_ImplGlfwGL3_NewFrame();
-
-		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-		if (uiCollapsed) 
-			ImGui::SetNextWindowSize(ImVec2(200, 100), ImGuiCond_Always);
-		else
-			ImGui::SetNextWindowSize(ImVec2(300, windowHeight), ImGuiCond_Always);
-
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-
-		ImGui::Begin("Debug information", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-		if (uiCollapsed) {
-			ImGui::Text("[Z] Uncollapse the UI");
-		} else {
-			ImGui::Text("[Z] Collapse the UI");
-			ImGui::Text("[R] Reset the camera position");
-			ImGui::Text("[F] Start recording the performance");
-			ImGui::Text("[T] Look at the wireframes of the voxels");
-			ImGui::Text("[G] Look at the triangles of the voxels");
-			ImGui::Text(camera.getLocked() ? "[C] Turn locked camera off" : "[C] Turn locked camera on");
-			ImGui::Text("");
-			ImGui::Text("[WASDQE] Move the camera");
-			ImGui::Text("[Mouse] Look around");
-		}
-		ImGui::Text("");
-		ImGui::Text("%.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
-		ImGui::Text("%.1f FPS", ImGui::GetIO().Framerate);
-		ImGui::End();
-
-		ImGui::PopStyleVar();
-
-		ImGui::Render();
-		ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
+		debug.draw();
 
 		glfwSwapBuffers(window);
 		Input::update();
