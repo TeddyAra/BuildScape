@@ -1,5 +1,7 @@
 #include "Chunk.h"
 
+#include <iostream>
+
 Chunk::Chunk(int pX, int pY, int pZ, bool pEmpty) 
 	: position(glm::vec3(pX, pY, pZ)), empty(pEmpty) 
 {

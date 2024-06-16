@@ -11,6 +11,7 @@ public:
 	~Debug();
 
 	void initialize(GLFWwindow* pWindow);
+	void destroy();
 	void draw();
 
 	void setSize(int pWidth, int pHeight);

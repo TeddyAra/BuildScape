@@ -31,7 +31,7 @@ const unsigned int cubeIndicesBack[] = {
 };
 
 World::World(float pVoxelSize, int pTopLayer, Camera* pCamera, Renderer* pRenderer)
-	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera), renderer(pRenderer)
+	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera), renderer(pRenderer), shaderProgram(NULL), wireframe(0)
 {
 	checkCurrentChunk = true;
 	interalFacesCulled = false;
@@ -71,8 +71,6 @@ void World::generate() {
 							}
 						}
 					}
-
-					//if (INTERNAL_FACE_CULLING) internalFaceCulling(chunk);
 				}
 
 				chunks.push_back(chunk);
@@ -182,12 +180,12 @@ void World::draw() {
 
 			std::vector<GLuint> combinedIndices;
 
-			if (left == 0 && !chunk.getIgnoreLeft())   combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesLeft),   std::end(cubeIndicesLeft));
+			if (left == 0 &&  !chunk.getIgnoreLeft())  combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesLeft),   std::end(cubeIndicesLeft));
 			if (right == 0 && !chunk.getIgnoreRight()) combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesRight),  std::end(cubeIndicesRight));
-			if (up == 0 && !chunk.getIgnoreUp())       combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop),    std::end(cubeIndicesTop));
-			if (down == 0 && !chunk.getIgnoreDown())   combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
+			if (up == 0 &&    !chunk.getIgnoreUp())    combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop),    std::end(cubeIndicesTop));
+			if (down == 0 &&  !chunk.getIgnoreDown())  combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
 			if (front == 0 && !chunk.getIgnoreFront()) combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesFront),  std::end(cubeIndicesFront));
-			if (back == 0 && !chunk.getIgnoreBack())   combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBack),   std::end(cubeIndicesBack));
+			if (back == 0 &&  !chunk.getIgnoreBack())  combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBack),   std::end(cubeIndicesBack));
 
 			renderer->bindEBO();
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, combinedIndices.size() * sizeof(GLuint), combinedIndices.data(), GL_STATIC_DRAW);

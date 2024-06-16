@@ -23,6 +23,11 @@ void Debug::initialize(GLFWwindow* pWindow) {
 	style.Colors[ImGuiCol_TitleBgCollapsed] = titleColor;
 }
 
+void Debug::destroy() {
+	ImGui_ImplGlfwGL3_Shutdown();
+	ImGui::DestroyContext();
+}
+
 void Debug::draw() {
 	ImGui_ImplGlfwGL3_NewFrame();
 	ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);

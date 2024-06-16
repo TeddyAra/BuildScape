@@ -40,16 +40,17 @@
 // 7 bits = 0x7F = 0 - 127
 // 8 bits = 0xFF = 0 - 255
 
-// Game information
+const bool INTERNAL_FACE_CULLING = true;
+const bool BACK_FACE_CULLING = true;
+
+// Game variables
 std::string windowName = "BuildScape";
 std::string gameVersion = "Alpha";
 
-// Window variables
 int windowWidth = 960;
 int windowHeight = 540;
 float voxelSize = 0.5f;
 
-// Camera
 glm::vec3 normalPos = glm::vec3(-2.0f, 8.0f, -2.0f);
 glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
 glm::vec3 normalUp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -71,37 +72,7 @@ float recordCamSpeed = 3;
 int frameCounter = 0;
 bool uiCollapsed = false;
 
-const unsigned int cubeIndicesLeft[] = {
-	4, 6, 2,
-	4, 2, 0
-};
-
-const unsigned int cubeIndicesRight[] = {
-	1, 3, 7,
-	1, 7, 5
-};
-
-const unsigned int cubeIndicesTop[] = {
-	2, 6, 7,
-	2, 7, 3
-};
-
-const unsigned int cubeIndicesBottom[] = {
-	4, 0, 1,
-	4, 1, 5
-};
-
-const unsigned int cubeIndicesFront[] = {
-	0, 2, 3,
-	0, 3, 1
-};
-
-const unsigned int cubeIndicesBack[] = {
-	4, 6, 7,
-	4, 7, 5
-};
-
-bool checkCurrentChunk = true;
+bool checkCurrentChunk = false;
 
 // Input
 void processInput(GLFWwindow* window) {
@@ -144,12 +115,12 @@ void processInput(GLFWwindow* window) {
 
 	// Render switch
 	if (Input::getKeyDown(GLFW_KEY_T)) {
-		if (wireframe == 0) {
+		if (world.getWireframeColour() == 0) {
 			glPolygonMode(GL_FRONT, GL_LINE);
-			wireframe = 1;
+			world.setWireframeColour(1);
 		} else {
 			glPolygonMode(GL_FRONT, GL_FILL);
-			wireframe = 0;
+			world.setWireframeColour(0);
 		}
 	}
 
@@ -193,7 +164,7 @@ void processInput(GLFWwindow* window) {
 		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
 
-	if (checkCurrentChunk) {
+	if (checkCurrentChunk && BACK_FACE_CULLING) {
 		world.checkChunk();
 	}
 }
@@ -234,7 +205,7 @@ int main(void) {
 	debug.addLine("[Mouse] Look around");
 
 	world.generate();
-	world.internalFaceCull();
+	if (INTERNAL_FACE_CULLING) world.internalFaceCull();
 
 	// Shaders ----------------------------------------------------------------------------------------------------------------------------
 	const char* vertexShaderSource = R"(
@@ -328,8 +299,7 @@ int main(void) {
 		glfwPollEvents();
 	}
 
-	ImGui_ImplGlfwGL3_Shutdown();
-	ImGui::DestroyContext();
+	debug.destroy();
 	glfwTerminate();
 	return 0;
 }
