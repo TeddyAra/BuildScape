@@ -10,6 +10,7 @@
 #include <vector>
 #include <stdint.h>
 #include <cstdint>
+#include <chrono>
 
 #include "Input.h"
 #include "Camera.h"
@@ -40,7 +41,7 @@
 // 7 bits = 0x7F = 0 - 127
 // 8 bits = 0xFF = 0 - 255
 
-bool internalFaceCulling = true;
+bool internalFaceCulling = false;
 bool backFaceCulling = true;
 
 // Game variables
@@ -194,6 +195,8 @@ void regenerateWorld() {
 }
 
 int main(void) {
+	auto start = std::chrono::high_resolution_clock::now();
+
 	// Vertices
 	float verDist = voxelSize / 2.0f;
 	const float cubeVertices[] = {
@@ -279,6 +282,10 @@ int main(void) {
 	// MVP
 	glm::mat4 view;
 	glm::mat4 projection = glm::perspective(glm::radians(camera.getFov()), (float)windowWidth / (float)windowHeight, 0.1f, 100.0f);
+
+	auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> duration = end - start;
+	std::cout << "Execution time: " << duration.count() << " seconds\n";
 
 	// Game loop
 	while (!glfwWindowShouldClose(window)) {
