@@ -22,6 +22,7 @@ public:
 	static glm::vec2 getMousePosition();
 	static glm::vec2 getDeltaMousePosition();
 	static void mouseCallback(GLFWwindow* window, double xPos, double yPos);
+	static void toggleIgnoreMouse();
 
 private:
 	static std::map<int, bool> keyMemory;
@@ -30,4 +31,5 @@ private:
 	static glm::vec2 mousePosition;
 	static glm::vec2 lastMousePosition;
 	static bool firstMouse;
+	static bool ignoreMouse;
 };

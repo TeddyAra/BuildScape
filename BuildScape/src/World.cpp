@@ -50,6 +50,7 @@ void World::generate() {
 		for (int cY = -4; cY < 5; cY++) {
 			for (int cX = -6; cX < 6; cX++) {
 				// Create a chunk
+				std::cout << "New chunk" << std::endl;
 				Chunk chunk(cX * 16 * voxelSize, cY * 16 * voxelSize, cZ * 16 * voxelSize, true);
 
 				// Only generate chunks in the middle for testing purposes
@@ -85,7 +86,11 @@ void World::generate() {
 	}
 }
 
-void World::checkChunk() {
+void World::clear() {
+	chunks.clear();
+}
+
+void World::checkChunk(bool pIgnoreIfCurrentChunk) {
 	// No longer check the chunks
 	setCheckChunk(false);
 
@@ -102,7 +107,7 @@ void World::checkChunk() {
 			glm::vec3 newClosest = chunk.getPosition();
 
 			// Check if it's not the current chunk
-			if (newClosest != closestChunkPos) {
+			if (newClosest != closestChunkPos || pIgnoreIfCurrentChunk) {
 				closestChunkPos = newClosest;
 
 				// Make sure current chunk can be seen entirely
@@ -130,6 +135,17 @@ void World::checkChunk() {
 
 			break;
 		}
+	}
+}
+
+void World::enableAllFaces() {
+	for (Chunk& chunk : chunks) {
+		chunk.setIgnoreRight(false);
+		chunk.setIgnoreLeft(false);
+		chunk.setIgnoreUp(false);
+		chunk.setIgnoreDown(false);
+		chunk.setIgnoreFront(false);
+		chunk.setIgnoreBack(false);
 	}
 }
 

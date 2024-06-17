@@ -18,7 +18,9 @@ public:
 	~World();
 
 	void generate();
-	void checkChunk();
+	void clear();
+	void checkChunk(bool pIgnoreIfCurrentChunk);
+	void enableAllFaces();
 	void setCheckChunk(bool pCheck);
 	glm::vec3 getClosestChunkPosition();
 	std::vector<Chunk> getChunks();

@@ -43,12 +43,17 @@ void Debug::draw() {
 
 	// Window text
 	if (collapsed) {
-		ImGui::Text("[Z] Uncollapse the debug window");
+		ImGui::Text("[Z] Uncollapse the UI");
 	} else {
+		ImGui::Text("[Z] Collapse the UI");
 		for (const char* line : lines) {
 			ImGui::Text(line);
 		}
-		ImGui::Text("[Z] Collapse the debug window");
+		for (const auto& iterator : buttons) {
+			if (ImGui::Button(iterator.first, ImVec2(250, 20))) {
+				iterator.second();
+			}
+		}
 	}
 	ImGui::Text("");
 	ImGui::Text("%.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
@@ -72,4 +77,8 @@ void Debug::setCollapsed(bool pCollapsed) {
 
 void Debug::addLine(const char* pLine) {
 	lines.push_back(pLine);
+}
+
+void Debug::addButton(const char* pLine, std::function<void()> pFunction) {
+	buttons[pLine] = pFunction;
 }

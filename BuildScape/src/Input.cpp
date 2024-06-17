@@ -5,6 +5,7 @@ std::map<int, bool> Input::keyMemory;
 glm::vec2 Input::mousePosition;
 glm::vec2 Input::lastMousePosition;
 bool Input::firstMouse = true;
+bool Input::ignoreMouse = false;
 
 void Input::setWindow(GLFWwindow* pWindow) {
 	window = pWindow;
@@ -52,6 +53,9 @@ glm::vec2 Input::getDeltaMousePosition() {
 }
 
 void Input::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
+	// Do nothing if we're ignoring the mouse
+	if (ignoreMouse) return;
+
 	// If this is called for the first time, have mousePosition set to the current mouse position
 	if (firstMouse) {
 		mousePosition = glm::vec2(xpos, ypos);
@@ -60,4 +64,10 @@ void Input::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
 
 	// Update current mouse position
 	mousePosition = glm::vec2(xpos, ypos);
+}
+
+void Input::toggleIgnoreMouse() {
+	ignoreMouse = !ignoreMouse;
+	glfwSetInputMode(window, GLFW_CURSOR, ignoreMouse ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+	//firstMouse = ignoreMouse;
 }

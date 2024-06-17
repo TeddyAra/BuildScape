@@ -40,8 +40,9 @@
 // 7 bits = 0x7F = 0 - 127
 // 8 bits = 0xFF = 0 - 255
 
-const bool INTERNAL_FACE_CULLING = true;
-const bool BACK_FACE_CULLING = true;
+bool internalFaceCulling = true;
+bool backFaceCulling = true;
+bool lastBackFaceCulling = true;
 
 // Game variables
 std::string windowName = "BuildScape";
@@ -78,6 +79,10 @@ bool checkCurrentChunk = false;
 
 // Input
 void processInput(GLFWwindow* window) {
+	if (Input::getKeyDown(GLFW_KEY_ESCAPE)) {
+		Input::toggleIgnoreMouse();
+	}
+
 	// Reset
 	if (Input::getKey(GLFW_KEY_R)) {
 		camera.setPosition(normalPos);
@@ -166,9 +171,22 @@ void processInput(GLFWwindow* window) {
 		if (!camera.getLocked()) checkCurrentChunk = true;
 	}
 
-	if (checkCurrentChunk && BACK_FACE_CULLING) {
-		world.checkChunk();
+	if (checkCurrentChunk && backFaceCulling) {
+		world.checkChunk(false);
 	}
+}
+
+void toggleBackfaceCulling() {
+	backFaceCulling = !backFaceCulling;
+	if (!backFaceCulling) world.enableAllFaces();
+	else world.checkChunk(true);
+}
+
+void regenerateWorld() {
+	internalFaceCulling = !internalFaceCulling;
+	world.clear();
+	world.generate();
+	if (internalFaceCulling) world.internalFaceCull();
 }
 
 int main(void) {
@@ -205,10 +223,13 @@ int main(void) {
 	debug.addLine("");
 	debug.addLine("[WASDQE] Move the camera");
 	debug.addLine("[Mouse] Look around");
+	debug.addLine("");
+	debug.addButton("Toggle backface culling", &toggleBackfaceCulling);
+	debug.addButton("Toggle internal face culling", &regenerateWorld);
 
 	// Generate world
 	world.generate();
-	if (INTERNAL_FACE_CULLING) world.internalFaceCull();
+	if (internalFaceCulling) world.internalFaceCull();
 
 	// Shaders
 	const char* vertexShaderSource = R"(
