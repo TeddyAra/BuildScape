@@ -10,9 +10,11 @@ Renderer::~Renderer() {
 }
 
 int Renderer::initialize(int pWindowWidth, int pWindowHeight, std::string(pWindowName), const float pCubeVertices[], int pNumVertices) {
+	// Initialize GLFW
 	if (!glfwInit())
 		return -1;
 
+	// Create a window
 	window = glfwCreateWindow(pWindowWidth, pWindowHeight, pWindowName.c_str(), NULL, NULL);
 	if (!window) {
 		glfwTerminate();
@@ -20,27 +22,32 @@ int Renderer::initialize(int pWindowWidth, int pWindowHeight, std::string(pWindo
 	}
 	Input::setWindow(window);
 
+	// GLFW settings
 	glfwMakeContextCurrent(window);
 	//glfwSwapInterval(1);
 	glfwSetCursorPosCallback(window, Input::mouseCallback);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+	// Initialize glew (OpenGL)
 	if (glewInit() != GLEW_OK) {
 		std::cout << "[ERROR] Initializing glew failed." << std::endl;
 	}
 
 	std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
 
+	// OpenGL settings
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 
+	// Generate buffers
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
 	glGenBuffers(1, &EBO);
 
+	// Bind the voxel vertex array
 	glBindVertexArray(VAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);

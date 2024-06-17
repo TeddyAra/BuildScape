@@ -55,11 +55,13 @@ glm::vec3 normalPos = glm::vec3(-2.0f, 8.0f, -2.0f);
 glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
 glm::vec3 normalUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
+// Classes
 Camera camera(normalPos, normalFront, normalUp, 1.0f, 45.0f, 1.0f);
 Renderer renderer;
 World world(voxelSize, 4, &camera, &renderer);
 Debug debug("Debug window", 300, windowHeight);
 
+// Other variables
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 bool firstMouse = true;
@@ -170,9 +172,7 @@ void processInput(GLFWwindow* window) {
 }
 
 int main(void) {
-	// Game variables
-	int test = 4;
-	float voxelSize = 0.5f;
+	// Vertices
 	float verDist = voxelSize / 2.0f;
 	const float cubeVertices[] = {
 		-verDist, -verDist, -verDist,
@@ -187,11 +187,13 @@ int main(void) {
 
 	int numVertices = sizeof(cubeVertices) / sizeof(cubeVertices[0]);
 
+	// Initialize renderer (GLFW / OpenGL)
 	if (renderer.initialize(windowWidth, windowHeight, std::string(windowName + " - " + gameVersion), cubeVertices, numVertices) == -1)
 		return -1;
 
 	GLFWwindow* window = renderer.getWindow();
 
+	// Debug window text
 	debug.initialize(window);
 
 	debug.addLine("[Z] Collapse the UI");
@@ -204,10 +206,11 @@ int main(void) {
 	debug.addLine("[WASDQE] Move the camera");
 	debug.addLine("[Mouse] Look around");
 
+	// Generate world
 	world.generate();
 	if (INTERNAL_FACE_CULLING) world.internalFaceCull();
 
-	// Shaders ----------------------------------------------------------------------------------------------------------------------------
+	// Shaders
 	const char* vertexShaderSource = R"(
 		#version 330 core
 		layout(location = 0) in vec3 aPos;
@@ -247,7 +250,6 @@ int main(void) {
 	GLuint fragmentShader = renderer.setShader(fragmentShaderSource, GL_FRAGMENT_SHADER);
 	GLuint shaderProgram = renderer.createShaderProgram(vertexShader, fragmentShader);
 	world.setShaderProgram(shaderProgram);
-	// ------------------------------------------------------------------------------------------------------------------------------------
 
 	// MVP
 	glm::mat4 view;
@@ -255,12 +257,13 @@ int main(void) {
 
 	// Game loop
 	while (!glfwWindowShouldClose(window)) {
+		// Delta time
 		float currentFrame = glfwGetTime();
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 
+		// Input and camera movement
 		processInput(window);
-		camera.update(deltaTime);
 
 		if (recording) {
 			recordingTimer -= deltaTime;
@@ -274,10 +277,13 @@ int main(void) {
 			camera.translate(glm::vec3(deltaTime * recordCamSpeed, 0.0f, deltaTime * recordCamSpeed));
 		}
 
+		camera.update(deltaTime);
+
+		// OpenGL clear
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		// Shader uniforms
 		glUseProgram(shaderProgram);
-
 		GLuint viewLoc = glGetUniformLocation(shaderProgram, "view");
 		GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
 		GLuint wireLoc = glGetUniformLocation(shaderProgram, "wireframe");
@@ -289,13 +295,14 @@ int main(void) {
 		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
+		// Render world and debug window
 		world.draw();
-
 		debug.draw();
 
 		glfwSwapBuffers(window);
-		Input::update();
 
+		// Update input
+		Input::update();
 		glfwPollEvents();
 	}
 

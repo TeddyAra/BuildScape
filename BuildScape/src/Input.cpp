@@ -12,6 +12,7 @@ void Input::setWindow(GLFWwindow* pWindow) {
 }
 
 void Input::update() {
+	// Update the map to hold the last frame's key and mouse information
 	std::map<int, bool>::iterator it;
 	for (it = keyMemory.begin(); it != keyMemory.end(); it++) {
 		keyMemory[it->first] = getKey(it->first);
@@ -51,11 +52,12 @@ glm::vec2 Input::getDeltaMousePosition() {
 }
 
 void Input::mouseCallback(GLFWwindow* window, double xpos, double ypos) {
+	// If this is called for the first time, have mousePosition set to the current mouse position
 	if (firstMouse) {
 		mousePosition = glm::vec2(xpos, ypos);
 		firstMouse = false;
 	}
 
-	lastMousePosition = mousePosition;
+	// Update current mouse position
 	mousePosition = glm::vec2(xpos, ypos);
 }

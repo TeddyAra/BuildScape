@@ -11,9 +11,11 @@ Debug::~Debug() {
 }
 
 void Debug::initialize(GLFWwindow* pWindow) {
+	// Initialize GLFW
 	ImGui::CreateContext();
 	ImGui_ImplGlfwGL3_Init(pWindow, true);
 
+	// Create style
 	ImGui::StyleColorsDark();
 	ImGuiStyle& style = ImGui::GetStyle();
 	ImVec4 titleColor = ImVec4(0.15f, 0.3f, 0.5f, 1.0f);
@@ -24,24 +26,29 @@ void Debug::initialize(GLFWwindow* pWindow) {
 }
 
 void Debug::destroy() {
+	// Destroy GLFW 
 	ImGui_ImplGlfwGL3_Shutdown();
 	ImGui::DestroyContext();
 }
 
 void Debug::draw() {
+	// Start a new frame
 	ImGui_ImplGlfwGL3_NewFrame();
+
+	// Make window ready
 	ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
 	ImGui::SetNextWindowSize(ImVec2(debugSize.x, debugSize.y), ImGuiCond_Always);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-
 	ImGui::Begin(debugName, nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+
+	// Window text
 	if (collapsed) {
-		ImGui::Text("[Z] Uncollapse the UI");
+		ImGui::Text("[Z] Uncollapse the debug window");
 	} else {
 		for (const char* line : lines) {
 			ImGui::Text(line);
 		}
-		ImGui::Text("[Z] Collapse the UI");
+		ImGui::Text("[Z] Collapse the debug window");
 	}
 	ImGui::Text("");
 	ImGui::Text("%.3f ms/frame", 1000.0f / ImGui::GetIO().Framerate);
@@ -50,6 +57,7 @@ void Debug::draw() {
 
 	ImGui::PopStyleVar();
 
+	// Show debug window
 	ImGui::Render();
 	ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
 }
