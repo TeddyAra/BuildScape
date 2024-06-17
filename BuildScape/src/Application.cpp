@@ -221,7 +221,6 @@ int main(void) {
 	// Debug window text
 	debug.initialize(window);
 
-	debug.addLine("[Z] Collapse the UI");
 	debug.addLine("[R] Reset the camera position");
 	debug.addLine("[F] Start recording the performance");
 	debug.addLine("[T] Look at the wireframes of the voxels");
