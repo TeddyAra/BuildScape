@@ -79,6 +79,8 @@ bool checkCurrentChunk = false;
 
 // Input
 void processInput(GLFWwindow* window) {
+	checkCurrentChunk = false;
+
 	if (Input::getKeyDown(GLFW_KEY_ESCAPE)) {
 		Input::toggleIgnoreMouse();
 	}
