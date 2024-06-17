@@ -39,7 +39,7 @@ private:
 	glm::vec3 closestChunkPos;
 	float voxelSize;
 	int topLayer;
-	bool interalFacesCulled;
+	bool internalFacesCulled;
 	int wireframe;
 
 	Camera* camera;

@@ -13,6 +13,9 @@ public:
 	void setFront(glm::vec3 pFront);
 	void setUp(glm::vec3 pUp);
 
+	void setYaw(float pYaw);
+	void setPitch(float pPitch);
+
 	glm::vec3 getPosition();
 	glm::vec3 getLockedPosition();
 	glm::vec3 getFront();

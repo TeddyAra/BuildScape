@@ -7,7 +7,7 @@ Chunk::Chunk(int pX, int pY, int pZ, bool pEmpty)
 }
 
 Chunk::~Chunk() {
-	
+
 }
 
 void Chunk::addBlock(std::uint32_t pBlock) {

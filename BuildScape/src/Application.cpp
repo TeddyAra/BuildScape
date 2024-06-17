@@ -42,7 +42,6 @@
 
 bool internalFaceCulling = true;
 bool backFaceCulling = true;
-bool lastBackFaceCulling = true;
 
 // Game variables
 std::string windowName = "BuildScape";
@@ -73,6 +72,7 @@ float recordingTime = 10;
 float recordingTimer = 0;
 float recordCamSpeed = 3;
 int frameCounter = 0;
+float fpsCounter = 0;
 bool uiCollapsed = false;
 
 bool checkCurrentChunk = false;
@@ -86,8 +86,10 @@ void processInput(GLFWwindow* window) {
 	// Reset
 	if (Input::getKey(GLFW_KEY_R)) {
 		camera.setPosition(normalPos);
-		camera.setFront(normalFront);
-		camera.setUp(normalUp);
+		/*camera.setFront(normalFront);
+		camera.setUp(normalUp);*/
+		camera.setYaw(45.0f);
+		camera.setPitch(0.0f);
 
 		checkCurrentChunk = true;
 	}
@@ -289,10 +291,12 @@ int main(void) {
 		if (recording) {
 			recordingTimer -= deltaTime;
 			frameCounter++;
+			fpsCounter += ImGui::GetIO().Framerate;
 
 			if (recordingTimer <= 0) {
 				recording = false;
-				std::cout << "Amount of frames: " << frameCounter << std::endl;
+				fpsCounter /= frameCounter;
+				std::cout << "Amount of frames: " << frameCounter << "\nAverage FPS: " << fpsCounter << std::endl;
 			}
 
 			camera.translate(glm::vec3(deltaTime * recordCamSpeed, 0.0f, deltaTime * recordCamSpeed));

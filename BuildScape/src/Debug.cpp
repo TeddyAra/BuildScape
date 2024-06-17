@@ -7,7 +7,7 @@ Debug::Debug(const char* pDebugName, int pWidth, int pHeight)
 }
 
 Debug::~Debug() {
-
+	
 }
 
 void Debug::initialize(GLFWwindow* pWindow) {

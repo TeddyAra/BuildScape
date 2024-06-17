@@ -35,13 +35,12 @@ World::World(float pVoxelSize, int pTopLayer, Camera* pCamera, Renderer* pRender
 	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera), renderer(pRenderer), shaderProgram(NULL), wireframe(0)
 {
 	checkCurrentChunk = true;
-	interalFacesCulled = false;
+	internalFacesCulled = false;
 	closestChunkPos = glm::vec3(0, 0, 0);
 }
 
 World::~World() {
-	delete camera;
-	delete renderer;
+
 }
 
 void World::generate() {
@@ -50,7 +49,6 @@ void World::generate() {
 		for (int cY = -4; cY < 5; cY++) {
 			for (int cX = -6; cX < 6; cX++) {
 				// Create a chunk
-				std::cout << "New chunk" << std::endl;
 				Chunk chunk(cX * 16 * voxelSize, cY * 16 * voxelSize, cZ * 16 * voxelSize, true);
 
 				// Only generate chunks in the middle for testing purposes
@@ -87,6 +85,7 @@ void World::generate() {
 }
 
 void World::clear() {
+	internalFacesCulled = false;
 	chunks.clear();
 }
 
@@ -198,7 +197,7 @@ void World::draw() {
 			int front = 0;
 			int back = 0;
 
-			if (interalFacesCulled) {
+			if (internalFacesCulled) {
 				left = (block >> 11) & 0x01;
 				right = (block >> 10) & 0x01;
 				down = (block >> 9) & 0x01;
@@ -206,9 +205,6 @@ void World::draw() {
 				front = (block >> 7) & 0x01;
 				back = (block >> 6) & 0x01;
 			}
-
-			// Ignore empty blocks
-			if (left + right + down + up + front + back == 0) continue;
 
 			// Set model uniform
 			GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
@@ -282,7 +278,7 @@ int World::isNeighbourPresent(const std::vector<std::uint32_t>& blocks, int inde
 }
 
 void World::internalFaceCull() {
-	interalFacesCulled = true;
+	internalFacesCulled = true;
 	for (Chunk& chunk : chunks) {
 		std::vector<std::uint32_t>& blocks = chunk.getBlocks();
 
@@ -310,5 +306,5 @@ void World::internalFaceCull() {
 }
 
 bool World::areInternalFacesCulled() {
-	return interalFacesCulled;
+	return internalFacesCulled;
 }

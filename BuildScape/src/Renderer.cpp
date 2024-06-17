@@ -6,7 +6,7 @@ Renderer::Renderer()
 }
 
 Renderer::~Renderer() {
-
+	
 }
 
 int Renderer::initialize(int pWindowWidth, int pWindowHeight, std::string(pWindowName), const float pCubeVertices[], int pNumVertices) {

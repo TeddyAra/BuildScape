@@ -45,6 +45,14 @@ void Camera::setUp(glm::vec3 pUp) {
 	up = pUp;
 }
 
+void Camera::setYaw(float pYaw) {
+	yaw = pYaw;
+}
+
+void Camera::setPitch(float pPitch) {
+	pitch = pPitch;
+}
+
 glm::vec3 Camera::getPosition() {
 	return position;
 }
