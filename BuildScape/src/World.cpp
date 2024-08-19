@@ -1,36 +1,5 @@
 #include "World.h"
 
-// Voxel indices for each direction
-const unsigned int cubeIndicesLeft[] = {
-	4, 6, 2,
-	4, 2, 0
-};
-
-const unsigned int cubeIndicesRight[] = {
-	1, 3, 7,
-	1, 7, 5
-};
-
-const unsigned int cubeIndicesTop[] = {
-	2, 6, 7,
-	2, 7, 3
-};
-
-const unsigned int cubeIndicesBottom[] = {
-	4, 0, 1,
-	4, 1, 5
-};
-
-const unsigned int cubeIndicesFront[] = {
-	0, 2, 3,
-	0, 3, 1
-};
-
-const unsigned int cubeIndicesBack[] = {
-	4, 6, 7,
-	4, 7, 5
-};
-
 World::World(float pVoxelSize, int pTopLayer, Camera* pCamera, Renderer* pRenderer)
 	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera), renderer(pRenderer), shaderProgram(NULL), wireframe(0)
 {
@@ -173,67 +142,74 @@ int World::getWireframeColour() {
 }
 
 void World::draw() {
-	for (Chunk chunk : chunks) {
+	for (Chunk& chunk : chunks) {
 		// Ignore empty chunks
 		if (chunk.isEmpty()) continue;
 
-		for (const auto& block : chunk.getBlocks()) {
-			// Ignore air blocks
-			int id = (block >> 12) & 0xFF;
-			if (id == 0) continue;
+		// Set model uniform
+		GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), chunk.getPosition() * voxelSize);
+		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 
-			int x = (block >> 28) & 0x0F;
-			int y = (block >> 24) & 0x0F;
-			int z = (block >> 20) & 0x0F;
+		if (checkCurrentChunk) {
+			chunk.instances.clear();
 
-			// Get the position of the block
-			glm::vec3 pos(glm::vec3(x * voxelSize, y * voxelSize, z * voxelSize) + chunk.getPosition());
+			for (const auto& block : chunk.getBlocks()) {
+				// Ignore air blocks
+				int id = (block >> 12) & 0xFF;
+				if (id == 0) continue;
 
-			// Check which faces to draw
-			int left = 0;
-			int right = 0;
-			int down = 0;
-			int up = 0;
-			int front = 0;
-			int back = 0;
+				int x = (block >> 28) & 0x0F;
+				int y = (block >> 24) & 0x0F;
+				int z = (block >> 20) & 0x0F;
 
-			if (internalFacesCulled) {
-				left = (block >> 11) & 0x01;
-				right = (block >> 10) & 0x01;
-				down = (block >> 9) & 0x01;
-				up = (block >> 8) & 0x01;
-				front = (block >> 7) & 0x01;
-				back = (block >> 6) & 0x01;
+				// Get the position of the block
+				glm::vec3 pos(glm::vec3(x * voxelSize, y * voxelSize, z * voxelSize));
+
+				// Check which faces to draw
+				int left = (block >> 11) & 0x01;
+				int right = (block >> 10) & 0x01;
+				int down = (block >> 9) & 0x01;
+				int up = (block >> 8) & 0x01;
+				int front = (block >> 7) & 0x01;
+				int back = (block >> 6) & 0x01;
+
+				if (left == 0  && !chunk.getIgnoreLeft())  chunk.instances.push_back(addInstance(pos, 90,  glm::vec3(0, 1, 0), id));
+				if (right == 0 && !chunk.getIgnoreRight()) chunk.instances.push_back(addInstance(pos, 270, glm::vec3(0, 1, 0), id));
+				if (down == 0  && !chunk.getIgnoreDown())  chunk.instances.push_back(addInstance(pos, 270, glm::vec3(1, 0, 0), id));
+				if (up == 0    && !chunk.getIgnoreUp())    chunk.instances.push_back(addInstance(pos, 90,  glm::vec3(1, 0, 0), id));
+				if (back == 0  && !chunk.getIgnoreBack())  chunk.instances.push_back(addInstance(pos, 180, glm::vec3(0, 1, 0), id));
+				if (front == 0 && !chunk.getIgnoreFront()) chunk.instances.push_back(addInstance(pos, 0,   glm::vec3(0, 1, 0), id));
 			}
+		}
 
-			// Set model uniform
-			GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
-			glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
-			glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+		if (!chunk.instances.empty()) {
+			renderer->bindInstanceVBO();
+			glBufferData(GL_ARRAY_BUFFER, sizeof(Chunk::InstanceData) * chunk.instances.size(), chunk.instances.data(), GL_STATIC_DRAW);
+			renderer->unbindInstanceVBO();
 
-			// Set render colour
-			GLuint colLoc = glGetUniformLocation(shaderProgram, "col");
-			glUniform3f(colLoc, wireframe, wireframe, wireframe);
-
-			// Get all indices
-			std::vector<GLuint> combinedIndices;
-
-			if (left == 0 &&  !chunk.getIgnoreLeft())  combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesLeft),   std::end(cubeIndicesLeft));
-			if (right == 0 && !chunk.getIgnoreRight()) combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesRight),  std::end(cubeIndicesRight));
-			if (up == 0 &&    !chunk.getIgnoreUp())    combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesTop),    std::end(cubeIndicesTop));
-			if (down == 0 &&  !chunk.getIgnoreDown())  combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBottom), std::end(cubeIndicesBottom));
-			if (front == 0 && !chunk.getIgnoreFront()) combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesFront),  std::end(cubeIndicesFront));
-			if (back == 0 &&  !chunk.getIgnoreBack())  combinedIndices.insert(combinedIndices.end(), std::begin(cubeIndicesBack),   std::end(cubeIndicesBack));
-
-			// Bind the EBO and assign the indices
 			renderer->bindEBO();
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, combinedIndices.size() * sizeof(GLuint), combinedIndices.data(), GL_STATIC_DRAW);
-
-			// Draw the block's triangles and unbind the EBO
-			glDrawElements(GL_TRIANGLES, combinedIndices.size(), GL_UNSIGNED_INT, 0);
+			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, chunk.instances.size());
 			renderer->unbindEBO();
+		} else {
+			std::cerr << "[WARNING] No instances to draw for this chunk." << std::endl;
 		}
 	}
+
+	checkCurrentChunk = false;
+}
+
+Chunk::InstanceData World::addInstance(glm::vec3 pPosition, float pAngle, glm::vec3 pAxis, int pId) {
+	Chunk::InstanceData instance;
+	instance.offset = pPosition;
+
+	glm::mat4 rotation = glm::mat4(1.0f);
+	rotation = glm::rotate(rotation, glm::radians(pAngle), pAxis);
+	instance.rotation = rotation;
+
+	instance.id = pId;
+
+	return instance;
 }
 
 int World::isNeighbourPresent(const std::vector<std::uint32_t>& blocks, int index, int dir) {

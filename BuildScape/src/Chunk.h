@@ -33,6 +33,13 @@ public:
 	bool isEmpty();
 	std::vector<std::uint32_t>& getBlocks();
 
+	struct InstanceData {
+		glm::vec3 offset;
+		glm::mat4 rotation;
+		int id;
+	};
+	std::vector<InstanceData> instances;
+
 private:
 	std::vector<std::uint32_t> blocks;
 	glm::vec3 position;

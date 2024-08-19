@@ -1,7 +1,12 @@
 #include "Renderer.h"
 
+const unsigned int indices[] = {
+    0, 2, 3,
+    0, 3, 1
+};
+
 Renderer::Renderer()
-	: VAO(0), VBO(0), EBO(0), window(nullptr) {
+	: VAO(0), VBO(0), EBO(0), instanceVBO(0), window(nullptr) {
 
 }
 
@@ -9,58 +14,92 @@ Renderer::~Renderer() {
 	
 }
 
-int Renderer::initialize(int pWindowWidth, int pWindowHeight, std::string(pWindowName), const float pCubeVertices[], int pNumVertices) {
-	// Initialize GLFW
-	if (!glfwInit())
-		return -1;
+int Renderer::initialize(int pWindowWidth, int pWindowHeight, std::string pWindowName, const float pCubeVertices[], int pNumVertices) {
+    // Initialize GLFW
+    if (!glfwInit())
+        return -1;
 
-	// Create a window
-	window = glfwCreateWindow(pWindowWidth, pWindowHeight, pWindowName.c_str(), NULL, NULL);
-	if (!window) {
-		glfwTerminate();
-		return -1;
-	}
-	Input::setWindow(window);
+    // Create a window
+    window = glfwCreateWindow(pWindowWidth, pWindowHeight, pWindowName.c_str(), NULL, NULL);
+    if (!window) {
+        glfwTerminate();
+        return -1;
+    }
+    Input::setWindow(window);
 
-	// GLFW settings
-	glfwMakeContextCurrent(window);
-	//glfwSwapInterval(1);
-	glfwSetCursorPosCallback(window, Input::mouseCallback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // GLFW settings
+    glfwMakeContextCurrent(window);
+    glfwSetCursorPosCallback(window, Input::mouseCallback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-	// Initialize glew (OpenGL)
-	if (glewInit() != GLEW_OK) {
-		std::cout << "[ERROR] Initializing glew failed." << std::endl;
-	}
+    // Initialize glew (OpenGL)
+    if (glewInit() != GLEW_OK) {
+        std::cout << "[ERROR] Initializing glew failed." << std::endl;
+    }
 
-	std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
+    std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
 
-	// OpenGL settings
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // OpenGL settings
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
 
-	// Generate buffers
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
+    // Generate buffers
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+    glGenBuffers(1, &instanceVBO);
 
-	// Bind the voxel vertex array
-	glBindVertexArray(VAO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * sizeof(GLuint), indices, GL_STATIC_DRAW);
 
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, pNumVertices * sizeof(float), pCubeVertices, GL_STATIC_DRAW);
+    // Bind the voxel vertex array
+    glBindVertexArray(VAO);
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
+    // Bind and buffer cube vertices
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, pNumVertices * sizeof(float), pCubeVertices, GL_STATIC_DRAW);
 
-	return 0;
+    // Vertex position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // Bind and buffer instance data
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+
+    // Instance offset attribute 
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Chunk::InstanceData), (void*)(offsetof(Chunk::InstanceData, offset)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribDivisor(1, 1);
+
+    // Instance rotation attribute 
+    for (int i = 0; i < 4; i++) {
+        glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Chunk::InstanceData), (void*)(offsetof(Chunk::InstanceData, rotation) + i * sizeof(glm::vec4)));
+        glEnableVertexAttribArray(2 + i);
+        glVertexAttribDivisor(2 + i, 1);
+    }
+
+    // Instance id attribute
+    glVertexAttribPointer(6, 1, GL_INT, GL_FALSE, sizeof(Chunk::InstanceData), (void*)(offsetof(Chunk::InstanceData, id)));
+    glEnableVertexAttribArray(6);
+    glVertexAttribDivisor(6, 1);
+
+    return 0;
 }
+
 
 GLFWwindow* Renderer::getWindow() {
 	return window;
+}
+
+void Renderer::bindVAO() {
+    glBindVertexArray(VAO);
+}
+
+void Renderer::unbindVAO() {
+    glBindVertexArray(0);
 }
 
 void Renderer::bindEBO() {
@@ -69,6 +108,14 @@ void Renderer::bindEBO() {
 
 void Renderer::unbindEBO() {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+}
+
+void Renderer::bindInstanceVBO() {
+	glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+}
+
+void Renderer::unbindInstanceVBO() {
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 GLuint Renderer::setShader(const char* pShaderSource, GLenum pType) {

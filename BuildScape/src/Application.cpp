@@ -41,7 +41,7 @@
 // 7 bits = 0x7F = 0 - 127
 // 8 bits = 0xFF = 0 - 255
 
-bool internalFaceCulling = false;
+bool internalFaceCulling = true;
 bool backFaceCulling = true;
 
 // Game variables
@@ -57,7 +57,7 @@ glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
 glm::vec3 normalUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 // Classes
-Camera camera(normalPos, normalFront, normalUp, 1.0f, 45.0f, 1.0f);
+Camera camera(normalPos, normalFront, normalUp, 10.0f, 45.0f, 1.0f);
 Renderer renderer;
 World world(voxelSize, 4, &camera, &renderer);
 Debug debug("Debug window", 300, windowHeight);
@@ -203,11 +203,7 @@ int main(void) {
 		-verDist, -verDist, -verDist,
 		 verDist, -verDist, -verDist,
 		-verDist,  verDist, -verDist,
-		 verDist,  verDist, -verDist,
-		-verDist, -verDist,  verDist,
-		 verDist, -verDist,  verDist,
-		-verDist,  verDist,  verDist,
-		 verDist,  verDist,  verDist
+		 verDist,  verDist, -verDist
 	};
 
 	int numVertices = sizeof(cubeVertices) / sizeof(cubeVertices[0]);
@@ -241,6 +237,9 @@ int main(void) {
 	const char* vertexShaderSource = R"(
 		#version 330 core
 		layout(location = 0) in vec3 aPos;
+		layout(location = 1) in vec3 offset;
+		layout(location = 2) in mat4 rotation;
+		layout(location = 6) in int id;
 
 		out vec3 outColor;
 
@@ -248,15 +247,13 @@ int main(void) {
 		uniform mat4 view;
 		uniform mat4 projection;
 
-		uniform vec3 col;
-
 		void main() {
-			gl_Position = projection * view * model * vec4(aPos, 1.0);
-			vec3 vertexColor = col;
+			vec4 rotatedPos = rotation * vec4(aPos, 1.0);
+			gl_Position = projection * view * model * (rotatedPos + vec4(offset, 1.0));
+			vec3 vertexColor = vec3(0.0, 0.0, 0.0);
 
-			if (aPos.x > 0.0) vertexColor.x++;
+			if (aPos.x < 0.0) vertexColor.x++;
 			if (aPos.y > 0.0) vertexColor.y++;
-			if (aPos.z > 0.0) vertexColor.z++;
 
 			outColor = vertexColor;
 		}

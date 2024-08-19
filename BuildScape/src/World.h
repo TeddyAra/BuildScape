@@ -46,5 +46,6 @@ private:
 	Renderer* renderer;
 	GLuint shaderProgram;
 
-	int isNeighbourPresent(const std::vector<std::uint32_t>& blocks, int index, int dir);
+	int isNeighbourPresent(const std::vector<std::uint32_t>& pBlocks, int pIndex, int pDirection);
+	Chunk::InstanceData addInstance(glm::vec3 pPosition, float pAngle, glm::vec3 pAxis, int pId);
 };
