@@ -141,7 +141,7 @@ int World::getWireframeColour() {
 	return wireframe;
 }
 
-void World::draw() {
+void World::draw(glm::vec3 pSkyCol) {
 	for (Chunk& chunk : chunks) {
 		// Ignore empty chunks
 		if (chunk.isEmpty()) continue;
@@ -150,6 +150,22 @@ void World::draw() {
 		GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), chunk.getPosition() * voxelSize);
 		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+		renderer->setTextureUniforms(shaderProgram);
+
+		GLuint lightLoc = glGetUniformLocation(shaderProgram, "lightDir");
+		glm::vec3 lightDir = glm::normalize(glm::vec3(1, -5, -2));
+		glUniform3f(lightLoc, lightDir.x, lightDir.y, lightDir.z);
+
+		GLuint camLoc = glGetUniformLocation(shaderProgram, "camPos");
+		glm::vec3 camPos = camera->getPosition();
+		glUniform3f(camLoc, camPos.x, camPos.y, camPos.z);
+
+		GLuint fogLoc = glGetUniformLocation(shaderProgram, "fogDis");
+		glUniform2f(fogLoc, 50.0f, 20.0f);
+
+		GLuint skyLoc = glGetUniformLocation(shaderProgram, "skyCol");
+		glUniform3f(skyLoc, pSkyCol.x, pSkyCol.y, pSkyCol.z);
 
 		if (checkCurrentChunk) {
 			chunk.instances.clear();

@@ -31,7 +31,7 @@ public:
 
 	void setWireframeColour(int pColour);
 	int getWireframeColour();
-	void draw();
+	void draw(glm::vec3 pSkyCol);
 
 private:
 	std::vector<Chunk> chunks;

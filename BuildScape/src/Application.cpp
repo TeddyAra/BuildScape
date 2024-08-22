@@ -18,6 +18,7 @@
 #include "World.h"
 #include "Renderer.h"
 #include "Debug.h"
+#include "Texture.h"
 
 // unsigned 32 bit int, 26/32
 // 
@@ -51,6 +52,7 @@ std::string gameVersion = "Alpha";
 int windowWidth = 960;
 int windowHeight = 540;
 float voxelSize = 0.5f;
+glm::vec3 skyCol = glm::vec3(0.5f, 0.8f, 0.9f);
 
 glm::vec3 normalPos = glm::vec3(-2.0f, 8.0f, -2.0f);
 glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
@@ -200,10 +202,10 @@ int main(void) {
 	// Vertices
 	float verDist = voxelSize / 2.0f;
 	const float cubeVertices[] = {
-		-verDist, -verDist, -verDist,
-		 verDist, -verDist, -verDist,
-		-verDist,  verDist, -verDist,
-		 verDist,  verDist, -verDist
+		-verDist, -verDist, -verDist, 1.0f, 0.0f,
+		 verDist, -verDist, -verDist, 0.0f, 0.0f,
+		-verDist,  verDist, -verDist, 1.0f, 1.0f,
+		 verDist,  verDist, -verDist, 0.0f, 1.0f
 	};
 
 	int numVertices = sizeof(cubeVertices) / sizeof(cubeVertices[0]);
@@ -237,25 +239,49 @@ int main(void) {
 	const char* vertexShaderSource = R"(
 		#version 330 core
 		layout(location = 0) in vec3 aPos;
-		layout(location = 1) in vec3 offset;
-		layout(location = 2) in mat4 rotation;
-		layout(location = 6) in int id;
+		layout(location = 1) in vec2 aTexCoord;
+		layout(location = 2) in vec3 aOffset;
+		layout(location = 3) in mat4 aRotation;
+		layout(location = 7) in int aId;
 
 		out vec3 outColor;
+		out int outId;
+		out vec2 TexCoord;
+		out vec4 outNormal;
+		out vec3 outLightDir;
+		out vec3 outCamPos;
+		out vec2 outFogDis;
+		out vec3 outSkyCol;
+		out vec3 outWorldPos;
 
 		uniform mat4 model;
 		uniform mat4 view;
 		uniform mat4 projection;
+		uniform vec3 lightDir;
+		uniform vec3 camPos;
+		uniform vec2 fogDis;
+		uniform vec3 skyCol;
 
 		void main() {
-			vec4 rotatedPos = rotation * vec4(aPos, 1.0);
-			gl_Position = projection * view * model * (rotatedPos + vec4(offset, 1.0));
+			vec4 rotatedPos = aRotation * vec4(aPos, 1.0);
+			gl_Position = projection * view * model * (rotatedPos + vec4(aOffset, 1.0));
 			vec3 vertexColor = vec3(0.0, 0.0, 0.0);
 
-			if (aPos.x < 0.0) vertexColor.x++;
-			if (aPos.y > 0.0) vertexColor.y++;
+			//if (aPos.x < 0.0) vertexColor.x++;
+			//if (aPos.y > 0.0) vertexColor.y++;
 
+			vec3 worldPos = gl_Position.xyz;
+			vec4 normal = aRotation * vec4(0.0, 0.0, -1.0, 1.0);
+
+			outWorldPos = worldPos;
+			outNormal = normal;
+			outId = aId;
 			outColor = vertexColor;
+			TexCoord = aTexCoord;
+			outLightDir = lightDir;
+			outCamPos = camPos;
+			outFogDis = fogDis;
+			outSkyCol = skyCol;
 		}
 	)";
 
@@ -264,9 +290,32 @@ int main(void) {
 		out vec4 FragColor;
 
 		in vec3 outColor;
+		in int outId;
+		in vec2 TexCoord;
+		in vec4 outNormal;
+		in vec3 outLightDir;
+		in vec3 outCamPos;
+		in vec2 outFogDis;
+		in vec3 outSkyCol;
+		in vec3 outWorldPos;
+
+		uniform sampler2D tex0;
 
 		void main() {
-			FragColor = vec4(outColor, 1.0);
+			float dot = outNormal.x * -outLightDir.x + outNormal.y * -outLightDir.y + outNormal.z * -outLightDir.z;
+			dot = (dot + 1.0) / 2.0;
+			vec4 col = vec4(vec3(1.0, 1.0, 1.0) * dot, 1.0);
+
+			float distance = distance(outCamPos, outWorldPos) - outFogDis.y;
+			float lerp = clamp(distance / outFogDis.x, 0.0, 1.0);
+			//col = vec4(col.xy, lerp, 1.0);
+			col = vec4(vec3(col.rgb * (1.0 - lerp)), 1.0);
+			col = col + vec4(outSkyCol * lerp, 0.0);
+
+			//vec4 texColor = texture(tex0, TexCoord);
+			//vec4 col = texColor + vec4(TexCoord.rg * 0.5, 0.0, 0.0);
+
+			FragColor = col;
 		}
 	)";
 
@@ -274,6 +323,12 @@ int main(void) {
 	GLuint fragmentShader = renderer.setShader(fragmentShaderSource, GL_FRAGMENT_SHADER);
 	GLuint shaderProgram = renderer.createShaderProgram(vertexShader, fragmentShader);
 	world.setShaderProgram(shaderProgram);
+
+	std::vector<std::string> filepaths = {
+		"src/img/crate.png"
+	};
+
+	renderer.setupTextures(shaderProgram, filepaths);
 
 	// MVP
 	glm::mat4 view;
@@ -285,6 +340,11 @@ int main(void) {
 
 	// Game loop
 	while (!glfwWindowShouldClose(window)) {
+		GLenum err;
+		while ((err = glGetError()) != GL_NO_ERROR) {
+			std::cerr << "OpenGL error: " << err << std::endl;
+		}
+
 		// Delta time
 		float currentFrame = glfwGetTime();
 		deltaTime = currentFrame - lastFrame;
@@ -311,6 +371,7 @@ int main(void) {
 
 		// OpenGL clear
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glClearColor(skyCol.x, skyCol.y, skyCol.z, 1.0f);
 
 		// Shader uniforms
 		glUseProgram(shaderProgram);
@@ -326,7 +387,7 @@ int main(void) {
 		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
 		// Render world and debug window
-		world.draw();
+		world.draw(skyCol);
 		debug.draw();
 
 		glfwSwapBuffers(window);
