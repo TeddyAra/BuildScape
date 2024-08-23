@@ -21,15 +21,22 @@ public:
 	// Mouse
 	static glm::vec2 getMousePosition();
 	static glm::vec2 getDeltaMousePosition();
+
+	static bool getMouse(int pButton);
+	static bool getMouseDown(int pButton);
+	static bool getMouseUp(int pButton);
+
 	static void mouseCallback(GLFWwindow* window, double xPos, double yPos);
 	static void toggleIgnoreMouse();
 
 private:
 	static std::map<int, bool> keyMemory;
+	static std::map<int, bool> mouseMemory;
 	static GLFWwindow* window;
 
 	static glm::vec2 mousePosition;
 	static glm::vec2 lastMousePosition;
+
 	static bool firstMouse;
 	static bool ignoreMouse;
 };

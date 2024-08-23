@@ -1,6 +1,8 @@
 #pragma once
 
 #include "glm/glm.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/string_cast.hpp"
 
 class Camera {
 public:
@@ -31,6 +33,14 @@ public:
 
 	void setSpeed(float pSpeed);
 	void translate(glm::vec3 pDirection);
+
+	struct IntersectionInfo {
+		bool intersected = false;
+		bool inside = false;
+		int direction = -1;
+	};
+
+	IntersectionInfo checkIntersection(float pVoxelSize, glm::vec3 pPosition);
 	
 private:
 	glm::vec3 position;

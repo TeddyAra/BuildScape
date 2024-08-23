@@ -21,7 +21,8 @@ void World::generate() {
 				Chunk chunk(cX * 16 * voxelSize, cY * 16 * voxelSize, cZ * 16 * voxelSize, true);
 
 				// Only generate chunks in the middle for testing purposes
-				if (cY == 0 && cX > -2 && cX < 3 && cZ > -2 && cZ < 3) {
+				//if (cY == 0 && cX > -2 && cX < 3 && cZ > -2 && cZ < 3) {
+				if (cY == 0 && cX == 0 && cZ == 0) {
 					// Generate blocks for these chunks
 					chunk.setEmpty(false);
 					for (int y = 0; y < 16; y++) {
@@ -36,8 +37,7 @@ void World::generate() {
 
 								// ID
 								int air = 0;
-								if (y < topLayer - 1) air = 1;
-								if (y == topLayer - 1) air = Random::range(0, 1);
+								if (y < topLayer) air = 1;
 
 								block |= (air << 12);
 
@@ -141,6 +141,48 @@ int World::getWireframeColour() {
 	return wireframe;
 }
 
+void World::checkBlockManipulation() {
+	bool destroy = Input::getMouseDown(0);
+	bool place;
+	if (!destroy) {
+		place = Input::getMouseDown(1);
+		if (!place) return;
+	}
+
+	for (Chunk& chunk : chunks) {
+		if (chunk.isEmpty()) continue;
+
+		glm::vec3 chunkPos = chunk.getPosition();
+		for (size_t i = 0; i < chunk.getBlocks().size(); ++i) {
+			std::uint32_t& block = chunk.getBlocks()[i];
+
+			int id = (block >> 12) & 0xFF;
+			if (id == 0) continue;
+
+			int x = (block >> 28) & 0x0F;
+			int y = (block >> 24) & 0x0F;
+			int z = (block >> 20) & 0x0F;
+
+			glm::vec3 blockPos(x, y, z);
+			glm::vec3 globalPos = chunkPos + blockPos * voxelSize;
+
+			Camera::IntersectionInfo info = camera->checkIntersection(voxelSize, globalPos);
+			if (info.inside) {
+				if (destroy) {
+					std::cout << "Destroyed" << std::endl;
+
+					block &= ~(0xFF << 12);
+
+					cullChunk(chunk);
+					refreshChunk(chunk);
+				} 
+
+				return;
+			}
+		}
+	}
+}
+
 void World::draw(glm::vec3 pSkyCol) {
 	for (Chunk& chunk : chunks) {
 		// Ignore empty chunks
@@ -168,35 +210,7 @@ void World::draw(glm::vec3 pSkyCol) {
 		glUniform3f(skyLoc, pSkyCol.x, pSkyCol.y, pSkyCol.z);
 
 		if (checkCurrentChunk) {
-			chunk.instances.clear();
-
-			for (const auto& block : chunk.getBlocks()) {
-				// Ignore air blocks
-				int id = (block >> 12) & 0xFF;
-				if (id == 0) continue;
-
-				int x = (block >> 28) & 0x0F;
-				int y = (block >> 24) & 0x0F;
-				int z = (block >> 20) & 0x0F;
-
-				// Get the position of the block
-				glm::vec3 pos(glm::vec3(x * voxelSize, y * voxelSize, z * voxelSize));
-
-				// Check which faces to draw
-				int left = (block >> 11) & 0x01;
-				int right = (block >> 10) & 0x01;
-				int down = (block >> 9) & 0x01;
-				int up = (block >> 8) & 0x01;
-				int front = (block >> 7) & 0x01;
-				int back = (block >> 6) & 0x01;
-
-				if (left == 0  && !chunk.getIgnoreLeft())  chunk.instances.push_back(addInstance(pos, 90,  glm::vec3(0, 1, 0), id));
-				if (right == 0 && !chunk.getIgnoreRight()) chunk.instances.push_back(addInstance(pos, 270, glm::vec3(0, 1, 0), id));
-				if (down == 0  && !chunk.getIgnoreDown())  chunk.instances.push_back(addInstance(pos, 270, glm::vec3(1, 0, 0), id));
-				if (up == 0    && !chunk.getIgnoreUp())    chunk.instances.push_back(addInstance(pos, 90,  glm::vec3(1, 0, 0), id));
-				if (back == 0  && !chunk.getIgnoreBack())  chunk.instances.push_back(addInstance(pos, 180, glm::vec3(0, 1, 0), id));
-				if (front == 0 && !chunk.getIgnoreFront()) chunk.instances.push_back(addInstance(pos, 0,   glm::vec3(0, 1, 0), id));
-			}
+			refreshChunk(chunk);
 		}
 
 		if (!chunk.instances.empty()) {
@@ -213,6 +227,38 @@ void World::draw(glm::vec3 pSkyCol) {
 	}
 
 	checkCurrentChunk = false;
+}
+
+void World::refreshChunk(Chunk& pChunk) {
+	pChunk.instances.clear();
+
+	for (const auto& block : pChunk.getBlocks()) {
+		// Ignore air blocks
+		int id = (block >> 12) & 0xFF;
+		if (id == 0) continue;
+
+		int x = (block >> 28) & 0x0F;
+		int y = (block >> 24) & 0x0F;
+		int z = (block >> 20) & 0x0F;
+
+		// Get the position of the block
+		glm::vec3 pos(glm::vec3(x * voxelSize, y * voxelSize, z * voxelSize));
+
+		// Check which faces to draw
+		int left = (block >> 11) & 0x01;
+		int right = (block >> 10) & 0x01;
+		int down = (block >> 9) & 0x01;
+		int up = (block >> 8) & 0x01;
+		int front = (block >> 7) & 0x01;
+		int back = (block >> 6) & 0x01;
+
+		if (left == 0 && !pChunk.getIgnoreLeft())  pChunk.instances.push_back(addInstance(pos, 90, glm::vec3(0, 1, 0), id));
+		if (right == 0 && !pChunk.getIgnoreRight()) pChunk.instances.push_back(addInstance(pos, 270, glm::vec3(0, 1, 0), id));
+		if (down == 0 && !pChunk.getIgnoreDown())  pChunk.instances.push_back(addInstance(pos, 270, glm::vec3(1, 0, 0), id));
+		if (up == 0 && !pChunk.getIgnoreUp())    pChunk.instances.push_back(addInstance(pos, 90, glm::vec3(1, 0, 0), id));
+		if (back == 0 && !pChunk.getIgnoreBack())  pChunk.instances.push_back(addInstance(pos, 180, glm::vec3(0, 1, 0), id));
+		if (front == 0 && !pChunk.getIgnoreFront()) pChunk.instances.push_back(addInstance(pos, 0, glm::vec3(0, 1, 0), id));
+	}
 }
 
 Chunk::InstanceData World::addInstance(glm::vec3 pPosition, float pAngle, glm::vec3 pAxis, int pId) {
@@ -272,28 +318,37 @@ int World::isNeighbourPresent(const std::vector<std::uint32_t>& blocks, int inde
 void World::internalFaceCull() {
 	internalFacesCulled = true;
 	for (Chunk& chunk : chunks) {
-		std::vector<std::uint32_t>& blocks = chunk.getBlocks();
+		cullChunk(chunk);
+	}
+}
 
-		for (size_t i = 0; i < blocks.size(); ++i) {
-			// Ignore air blocks
-			std::uint32_t block = blocks[i];
-			int id = (block >> 12) & 0xFF;
-			if (id == 0) continue;
+void World::cullChunk(Chunk& pChunk) {
+	std::vector<std::uint32_t>& blocks = pChunk.getBlocks();
 
-			// Make a copy of the block
+	for (size_t i = 0; i < blocks.size(); ++i) {
+		// Ignore air blocks
+		std::uint32_t block = blocks[i];
+		int id = (block >> 12) & 0xFF;
+		if (id == 0) {
 			std::uint32_t blockCopy = block;
 
-			// Check which faces to draw
 			blockCopy &= ~(0x3F << 6);
-			for (int j = 0; j < 6; ++j) {
-				if (isNeighbourPresent(blocks, i, j)) {
-					blockCopy |= (1 << (11 - j));
-				}
-			}
-
-			// Update the block
-			blocks[i] = blockCopy;
+			continue;
 		}
+
+		// Make a copy of the block
+		std::uint32_t blockCopy = block;
+
+		// Check which faces to draw
+		blockCopy &= ~(0x3F << 6);
+		for (int j = 0; j < 6; ++j) {
+			if (isNeighbourPresent(blocks, i, j)) {
+				blockCopy |= (1 << (11 - j));
+			}
+		}
+
+		// Update the block
+		blocks[i] = blockCopy;
 	}
 }
 

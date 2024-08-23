@@ -109,3 +109,24 @@ void Camera::setSpeed(float pSpeed) {
 void Camera::translate(glm::vec3 pDirection) {
 	position += pDirection * speed;
 }
+
+Camera::IntersectionInfo Camera::checkIntersection(float pVoxelSize, glm::vec3 pPosition) {
+	IntersectionInfo info;
+
+	float voxel = pVoxelSize / 2.0f;
+	constexpr float epsilon = std::numeric_limits<float>::epsilon();
+	glm::vec3 camPos = position * (1.0f / pVoxelSize);
+
+	bool withinX = (camPos.x >= pPosition.x - voxel - epsilon) && (camPos.x <= pPosition.x + voxel + epsilon);
+	bool withinY = (camPos.y >= pPosition.y - voxel - epsilon) && (camPos.y <= pPosition.y + voxel + epsilon);
+	bool withinZ = (camPos.z >= pPosition.z - voxel - epsilon) && (camPos.z <= pPosition.z + voxel + epsilon);
+
+	std::cout << "Voxel position: " << glm::to_string(pPosition) << "\nCamera position: " << glm::to_string(camPos) << "\nVoxel size: " << pVoxelSize << std::endl << std::endl;
+
+	if (withinX && withinY && withinZ) {
+		std::cout << "Found" << std::endl;
+		info.inside = true;
+	}
+
+	return info;
+}

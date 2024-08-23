@@ -2,6 +2,7 @@
 
 GLFWwindow* Input::window = nullptr;
 std::map<int, bool> Input::keyMemory;
+std::map<int, bool> Input::mouseMemory;
 glm::vec2 Input::mousePosition;
 glm::vec2 Input::lastMousePosition;
 bool Input::firstMouse = true;
@@ -14,9 +15,14 @@ void Input::setWindow(GLFWwindow* pWindow) {
 
 void Input::update() {
 	// Update the map to hold the last frame's key and mouse information
-	std::map<int, bool>::iterator it;
-	for (it = keyMemory.begin(); it != keyMemory.end(); it++) {
-		keyMemory[it->first] = getKey(it->first);
+	std::map<int, bool>::iterator itKey;
+	for (itKey = keyMemory.begin(); itKey != keyMemory.end(); itKey++) {
+		keyMemory[itKey->first] = getKey(itKey->first);
+	}
+
+	std::map<int, bool>::iterator itMouse;
+	for (itMouse = mouseMemory.begin(); itMouse != mouseMemory.end(); itMouse++) {
+		mouseMemory[itMouse->first] = getMouse(itMouse->first);
 	}
 
 	lastMousePosition = mousePosition;
@@ -50,6 +56,28 @@ glm::vec2 Input::getMousePosition() {
 
 glm::vec2 Input::getDeltaMousePosition() {
 	return mousePosition - lastMousePosition;
+}
+
+bool Input::getMouse(int pButton) {
+	return (glfwGetMouseButton(window, pButton) == GLFW_PRESS);
+}
+
+bool Input::getMouseDown(int pButton) {
+	if (mouseMemory.find(pButton) != mouseMemory.end()) {
+		return (!mouseMemory[pButton] && glfwGetMouseButton(window, pButton) == GLFW_PRESS);
+	} else {
+		mouseMemory[pButton] = false;
+		return getMouse(pButton);
+	}
+}
+
+bool Input::getMouseUp(int pButton) {
+	if (mouseMemory.find(pButton) != mouseMemory.end()) {
+		return (mouseMemory[pButton] && glfwGetMouseButton(window, pButton) != GLFW_PRESS);
+	} else {
+		mouseMemory[pButton] = false;
+		return getMouse(pButton);
+	}
 }
 
 void Input::mouseCallback(GLFWwindow* window, double xpos, double ypos) {

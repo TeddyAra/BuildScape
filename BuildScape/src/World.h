@@ -25,12 +25,15 @@ public:
 	glm::vec3 getClosestChunkPosition();
 	std::vector<Chunk> getChunks();
 	void setShaderProgram(GLuint pShaderProgram);
+	void refreshChunk(Chunk& pChunk);
 
 	void internalFaceCull();
+	void cullChunk(Chunk& pChunk);
 	bool areInternalFacesCulled();
 
 	void setWireframeColour(int pColour);
 	int getWireframeColour();
+	void checkBlockManipulation();
 	void draw(glm::vec3 pSkyCol);
 
 private:

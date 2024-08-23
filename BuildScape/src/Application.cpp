@@ -387,6 +387,7 @@ int main(void) {
 		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
 		// Render world and debug window
+		world.checkBlockManipulation();
 		world.draw(skyCol);
 		debug.draw();
 
