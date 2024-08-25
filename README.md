@@ -4,7 +4,7 @@
 This is a simple voxel renderer written with C++ using OpenGL. This was a project to evaluate different culling techniques, namely internal face culling and backface culling, and how those culling techniques impact the performance of the program.<br>
 This project is based off of other voxel renderers like Minecraft, Teardown, and Crystal Islands. While Minecraft is fairly tame with its voxels, it is also notoriously badly optimized. But if you look at Teardown and Crystal Islands, their voxels are insanely small, and still the renderers manage to run at an acceptable FPS.<br>
 These renderers use a multitude of culling techniques to ensure the GPU can handle the workload. This inspired me to start working on my own voxel renderer and explore some of these culling techniques.<br>
-With enough time and motivation, I might turn this into something you can actually play. Before that, there are many things that need to be fixed. (Better way of drawing, shader file reading, frustum culling, draw calls for entire chunks, etc.)
+With enough time and motivation, I might turn this into something you can actually play. Before that, there are many things that need to be fixed. (Better way of drawing, shader file reading, frustum culling, textures, etc.)
 
 ## Culling techniques
 ### Internal face culling
@@ -30,6 +30,8 @@ In the tests conducted below, it should be noted that 'no culling techniques' do
 The way these tests were done is by having the program move over the generated voxels for a given amount of time. During this time, the amount of frames is being counted, and the FPS is being added up. Then, at the end, the FPS is divided by the amount of frames. For accurate results, testing should be done only after the FPS has gotten to a stable point. Because of the way it's being calculated, the shown FPS starts high and needs about 15 seconds to get to its actual value.<br>
 I've also recorded the execution time, which is how long the program takes to get from the start of main to the game loop, in seconds. All of the gathered information is an average of five tests.<br>
 To make testing easier, there's a debug window. This window shows the user different keybinds, like how to reset the camera's position, lock the camera, or look at the wireframes of the voxels. It also has two buttons for enabling and disabling the two culling techniques. Additionally, it shows the current FPS.
+
+#### [NOTE] These charts have since become redundant since switching to instanced drawing.
 
 ### Charts
 #### Chart 1 & 2: Frames/FPS
