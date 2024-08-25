@@ -31,9 +31,8 @@ The way these tests were done is by having the program move over the generated v
 I've also recorded the execution time, which is how long the program takes to get from the start of main to the game loop, in seconds. All of the gathered information is an average of five tests.<br>
 To make testing easier, there's a debug window. This window shows the user different keybinds, like how to reset the camera's position, lock the camera, or look at the wireframes of the voxels. It also has two buttons for enabling and disabling the two culling techniques. Additionally, it shows the current FPS.
 
-#### [NOTE] These charts have since become redundant since switching to instanced drawing.
-
 ### Charts
+####[NOTE] These charts have become redundant since switching to instanced draw calls. Anything after this, excluding the references, can safely be ignored.
 #### Chart 1 & 2: Frames/FPS
 ![Frames chart](frames.png)
 ![FPS chart](fps.png)<br>
