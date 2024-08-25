@@ -32,7 +32,7 @@ I've also recorded the execution time, which is how long the program takes to ge
 To make testing easier, there's a debug window. This window shows the user different keybinds, like how to reset the camera's position, lock the camera, or look at the wireframes of the voxels. It also has two buttons for enabling and disabling the two culling techniques. Additionally, it shows the current FPS.
 
 ### Charts
-####[NOTE] These charts have become redundant since switching to instanced draw calls. Anything after this, excluding the references, can safely be ignored.
+#### [NOTE] These charts have become redundant since switching to instanced draw calls. Anything after this, excluding the references, can safely be ignored.
 #### Chart 1 & 2: Frames/FPS
 ![Frames chart](frames.png)
 ![FPS chart](fps.png)<br>
