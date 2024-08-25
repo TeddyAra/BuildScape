@@ -26,12 +26,12 @@
 // y position   = 4 bits
 // z position   = 4 bits
 // id			= 8 bits
-// face up		= 1 bit
-// face down	= 1 bit
-// face right	= 1 bit
-// face left	= 1 bit
-// face front	= 1 bit
-// face back	= 1 bit
+// face up		= 1 bit  0
+// face down	= 1 bit  1
+// face right	= 1 bit  2
+// face left	= 1 bit  3
+// face front	= 1 bit  4
+// face back	= 1 bit  5
 //
 // 1 bit  = 0x01 = 0 -   1
 // 2 bits = 0x03 = 0 -   3
@@ -59,7 +59,7 @@ glm::vec3 normalFront = glm::normalize(glm::vec3(1.0f, -0.5f, 1.0f));
 glm::vec3 normalUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 // Classes
-Camera camera(normalPos, normalFront, normalUp, 10.0f, 45.0f, 1.0f);
+Camera camera(normalPos, normalFront, normalUp, 10.0f, 45.0f, 1.0f, 10.0f);
 Renderer renderer;
 World world(voxelSize, 4, &camera, &renderer);
 Debug debug("Debug window", 300, windowHeight);
@@ -220,16 +220,9 @@ int main(void) {
 	debug.initialize(window);
 
 	debug.addLine("[R] Reset the camera position");
-	debug.addLine("[F] Start recording the performance");
 	debug.addLine("[T] Look at the wireframes of the voxels");
-	debug.addLine("[G] Look at the triangles of the voxels");
-	debug.addLine("[C] Toggle locked camera");
-	debug.addLine("");
 	debug.addLine("[WASDQE] Move the camera");
 	debug.addLine("[Mouse] Look around");
-	debug.addLine("");
-	debug.addButton("Toggle backface culling", &toggleBackfaceCulling);
-	debug.addButton("Toggle internal face culling", &regenerateWorld);
 
 	// Generate world
 	world.generate();
@@ -241,11 +234,10 @@ int main(void) {
 		layout(location = 0) in vec3 aPos;
 		layout(location = 1) in vec2 aTexCoord;
 		layout(location = 2) in vec3 aOffset;
-		layout(location = 3) in mat4 aRotation;
-		layout(location = 7) in int aId;
+		layout(location = 3) in float aId;
+		layout(location = 4) in mat4 aRotation;
 
-		out vec3 outColor;
-		out int outId;
+		out float outId;
 		out vec2 TexCoord;
 		out vec4 outNormal;
 		out vec3 outLightDir;
@@ -265,10 +257,6 @@ int main(void) {
 		void main() {
 			vec4 rotatedPos = aRotation * vec4(aPos, 1.0);
 			gl_Position = projection * view * model * (rotatedPos + vec4(aOffset, 1.0));
-			vec3 vertexColor = vec3(0.0, 0.0, 0.0);
-
-			//if (aPos.x < 0.0) vertexColor.x++;
-			//if (aPos.y > 0.0) vertexColor.y++;
 
 			vec3 worldPos = gl_Position.xyz;
 			vec4 normal = aRotation * vec4(0.0, 0.0, -1.0, 1.0);
@@ -276,7 +264,6 @@ int main(void) {
 			outWorldPos = worldPos;
 			outNormal = normal;
 			outId = aId;
-			outColor = vertexColor;
 			TexCoord = aTexCoord;
 			outLightDir = lightDir;
 			outCamPos = camPos;
@@ -289,8 +276,7 @@ int main(void) {
 		#version 330 core
 		out vec4 FragColor;
 
-		in vec3 outColor;
-		in int outId;
+		in float outId;
 		in vec2 TexCoord;
 		in vec4 outNormal;
 		in vec3 outLightDir;
@@ -304,11 +290,15 @@ int main(void) {
 		void main() {
 			float dot = outNormal.x * -outLightDir.x + outNormal.y * -outLightDir.y + outNormal.z * -outLightDir.z;
 			dot = (dot + 1.0) / 2.0;
-			vec4 col = vec4(vec3(1.0, 1.0, 1.0) * dot, 1.0);
 
+			vec3 idCol = vec3(1.0, 1.0, 1.0);
+			if (abs(outId - 2.0) < 0.5) idCol = vec3(0.7, 0.1, 0.2);
+			else if (abs(outId - 3.0) < 0.5) idCol = vec3(0.2, 0.7, 0.1);
+			else if (abs(outId - 4.0) < 0.5) idCol = vec3(0.1, 0.2, 0.7);
+
+			vec4 col = vec4(idCol * dot, 1.0);
 			float distance = distance(outCamPos, outWorldPos) - outFogDis.y;
 			float lerp = clamp(distance / outFogDis.x, 0.0, 1.0);
-			//col = vec4(col.xy, lerp, 1.0);
 			col = vec4(vec3(col.rgb * (1.0 - lerp)), 1.0);
 			col = col + vec4(outSkyCol * lerp, 0.0);
 

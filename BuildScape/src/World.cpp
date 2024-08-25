@@ -1,7 +1,7 @@
 #include "World.h"
 
 World::World(float pVoxelSize, int pTopLayer, Camera* pCamera, Renderer* pRenderer)
-	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera), renderer(pRenderer), shaderProgram(NULL), wireframe(0)
+	: voxelSize(pVoxelSize), topLayer(pTopLayer), camera(pCamera), renderer(pRenderer), shaderProgram(NULL), wireframe(0), currentId(1)
 {
 	checkCurrentChunk = true;
 	internalFacesCulled = false;
@@ -21,8 +21,7 @@ void World::generate() {
 				Chunk chunk(cX * 16 * voxelSize, cY * 16 * voxelSize, cZ * 16 * voxelSize, true);
 
 				// Only generate chunks in the middle for testing purposes
-				//if (cY == 0 && cX > -2 && cX < 3 && cZ > -2 && cZ < 3) {
-				if (cY == 0 && cX == 0 && cZ == 0) {
+				if (cY == 0 && cX > -2 && cX < 3 && cZ > -2 && cZ < 3) {
 					// Generate blocks for these chunks
 					chunk.setEmpty(false);
 					for (int y = 0; y < 16; y++) {
@@ -59,8 +58,6 @@ void World::clear() {
 }
 
 void World::checkChunk(bool pIgnoreIfCurrentChunk) {
-	// No longer check the chunks
-	setCheckChunk(false);
 
 	// Get the camera's position
 	glm::vec3 pos = camera->getLocked() ? camera->getLockedPosition() : camera->getPosition();
@@ -92,12 +89,14 @@ void World::checkChunk(bool pIgnoreIfCurrentChunk) {
 					if (chunkCopy.getPosition() == closestChunkPos || chunkCopy.isEmpty()) continue;
 
 					// Have the renderer ignore some faces depending on where the chunk is
-					chunkCopy.setIgnoreLeft(chunkCopy.getPosition().x < closestChunkPos.x);
-					chunkCopy.setIgnoreRight(chunkCopy.getPosition().x > closestChunkPos.x);
-					chunkCopy.setIgnoreDown(chunkCopy.getPosition().y < closestChunkPos.y);
-					chunkCopy.setIgnoreUp(chunkCopy.getPosition().y > closestChunkPos.y);
-					chunkCopy.setIgnoreBack(chunkCopy.getPosition().z > closestChunkPos.z);
-					chunkCopy.setIgnoreFront(chunkCopy.getPosition().z < closestChunkPos.z);
+					//chunkCopy.setIgnoreLeft(chunkCopy.getPosition().x < closestChunkPos.x);
+					//chunkCopy.setIgnoreRight(chunkCopy.getPosition().x > closestChunkPos.x);
+					//chunkCopy.setIgnoreDown(chunkCopy.getPosition().y < closestChunkPos.y);
+					//chunkCopy.setIgnoreUp(chunkCopy.getPosition().y > closestChunkPos.y);
+					//chunkCopy.setIgnoreBack(chunkCopy.getPosition().z > closestChunkPos.z);
+					//chunkCopy.setIgnoreFront(chunkCopy.getPosition().z < closestChunkPos.z);
+
+					//refreshChunk(chunkCopy);
 				}
 			}
 
@@ -143,18 +142,24 @@ int World::getWireframeColour() {
 
 void World::checkBlockManipulation() {
 	bool destroy = Input::getMouseDown(0);
-	bool place;
+	bool place = false;
 	if (!destroy) {
 		place = Input::getMouseDown(1);
 		if (!place) return;
 	}
 
-	for (Chunk& chunk : chunks) {
+	Camera::IntersectionInfo finalInfo;
+	float distance = std::numeric_limits<float>::max();
+	int blockIt = -1;
+	int chunkIt = -1;
+
+	for (size_t i = 0; i < chunks.size(); ++i) {
+		Chunk chunk = chunks[i];
 		if (chunk.isEmpty()) continue;
 
 		glm::vec3 chunkPos = chunk.getPosition();
-		for (size_t i = 0; i < chunk.getBlocks().size(); ++i) {
-			std::uint32_t& block = chunk.getBlocks()[i];
+		for (size_t j = 0; j < chunk.getBlocks().size(); ++j) {
+			std::uint32_t& block = chunk.getBlocks()[j];
 
 			int id = (block >> 12) & 0xFF;
 			if (id == 0) continue;
@@ -166,24 +171,97 @@ void World::checkBlockManipulation() {
 			glm::vec3 blockPos(x, y, z);
 			glm::vec3 globalPos = chunkPos + blockPos * voxelSize;
 
-			Camera::IntersectionInfo info = camera->checkIntersection(voxelSize, globalPos);
+			Camera::IntersectionInfo info = camera->checkIntersection(voxelSize, globalPos, block);
+
+			if (info.intersected) {
+				if (info.distance < distance) {
+					finalInfo = info;
+					distance = info.distance;
+
+					chunkIt = i;
+					blockIt = j;
+				}
+			}
+
 			if (info.inside) {
-				if (destroy) {
-					std::cout << "Destroyed" << std::endl;
+				if (place) return;
 
-					block &= ~(0xFF << 12);
-
-					cullChunk(chunk);
-					refreshChunk(chunk);
-				} 
-
-				return;
+				blockIt = j;
+				chunkIt = i;
+				goto endloops;
 			}
 		}
+	}
+
+endloops:
+
+	if (blockIt == -1 || chunkIt == -1) return;
+
+	if (destroy) {
+		Chunk& chunk = chunks[chunkIt];
+		std::uint32_t& block = chunk.getBlocks()[blockIt];
+
+		block &= ~(0xFF << 12);
+
+		cullChunk(chunk);
+		refreshChunk(chunk);
+
+		std::cout << "Destroyed" << std::endl;
+	} else {
+		Chunk& chunk = chunks[chunkIt];
+		std::uint32_t& block = chunk.getBlocks()[blockIt];
+		int dir = finalInfo.direction;
+		int index = blockIt;
+
+		int x = (block >> 28) & 0x0F;
+		int y = (block >> 24) & 0x0F;
+		int z = (block >> 20) & 0x0F;
+
+		switch (dir) {
+		case 3: // Left
+			if (x == 0);
+			index -= 1;
+			break;
+		case 2: // Right
+			if (x == 15);
+			index += 1;
+			break;
+		case 1: // Down
+			if (y == 0);
+			index -= 256;
+			break;
+		case 0: // Up
+			if (y == 15);
+			index += 256;
+			break;
+		case 5: // Back
+			if (z == 0);
+			index -= 16;
+			break;
+		case 4: // Front
+			if (z == 15);
+			index += 16;
+			break;
+		}
+
+		std::uint32_t& newBlock = chunk.getBlocks()[index];
+		newBlock |= (currentId << 12);
+
+		cullChunk(chunk);
+		refreshChunk(chunk);
+
+		std::cout << "Placed with ID " << currentId << std::endl;
 	}
 }
 
 void World::draw(glm::vec3 pSkyCol) {
+	for (int i = 1; i < 5; i++) {
+		if (Input::getKeyDown(48 + i)) {
+			currentId = i;
+			break;
+		}
+	}
+
 	for (Chunk& chunk : chunks) {
 		// Ignore empty chunks
 		if (chunk.isEmpty()) continue;
@@ -269,7 +347,7 @@ Chunk::InstanceData World::addInstance(glm::vec3 pPosition, float pAngle, glm::v
 	rotation = glm::rotate(rotation, glm::radians(pAngle), pAxis);
 	instance.rotation = rotation;
 
-	instance.id = pId;
+	instance.id = (float)pId;
 
 	return instance;
 }

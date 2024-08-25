@@ -98,17 +98,17 @@ int Renderer::initialize(int pWindowWidth, int pWindowHeight, std::string pWindo
     glEnableVertexAttribArray(2);
     glVertexAttribDivisor(2, 1);
 
+    // Instance id attribute
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Chunk::InstanceData), (void*)(offsetof(Chunk::InstanceData, id)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribDivisor(3, 1);
+
     // Instance rotation attribute 
     for (int i = 0; i < 4; i++) {
-        glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Chunk::InstanceData), (void*)(offsetof(Chunk::InstanceData, rotation) + i * sizeof(glm::vec4)));
-        glEnableVertexAttribArray(3 + i);
-        glVertexAttribDivisor(3 + i, 1);
+        glVertexAttribPointer(4 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Chunk::InstanceData), (void*)(offsetof(Chunk::InstanceData, rotation) + i * sizeof(glm::vec4)));
+        glEnableVertexAttribArray(4 + i);
+        glVertexAttribDivisor(4 + i, 1);
     }
-
-    // Instance id attribute
-    glVertexAttribPointer(7, 1, GL_INT, GL_FALSE, sizeof(Chunk::InstanceData), (void*)(offsetof(Chunk::InstanceData, id)));
-    glEnableVertexAttribArray(7);
-    glVertexAttribDivisor(7, 1);
 
     return 0;
 }
@@ -150,18 +150,21 @@ void Renderer::setupTextures(GLuint pShaderProgram, const std::vector<std::strin
         texture.bind(i);
         textures.push_back(texture);
 
-        GLuint textureLoc = glGetUniformLocation(pShaderProgram, ("tex" + std::to_string(i)).c_str());
-        glUniform1i(textureLoc, i);
+        GLCall(GLuint textureLoc = glGetUniformLocation(pShaderProgram, ("tex" + std::to_string(i)).c_str()));
+        GLCall(glUniform1i(textureLoc, i));
 
         std::cout << "Setup texture " << pFilepaths[i] << " to tex" << i << std::endl;
     }
 }
 
 void Renderer::setTextureUniforms(GLuint pShaderProgram) {
+    glUseProgram(pShaderProgram);
+
     for (int i = 0; i < textures.size(); i++) {
-        GLuint textureLoc = glGetUniformLocation(pShaderProgram, ("tex" + std::to_string(i)).c_str());
+        GLCall(GLuint textureLoc = glGetUniformLocation(pShaderProgram, ("tex" + std::to_string(i)).c_str()));
         textures[i].bind();
-        glUniform1i(textureLoc, i);
+        GLCall(glUniform1i(textureLoc, i));
+        textures[i].unbind();
     }
 }
 
@@ -180,6 +183,8 @@ GLuint Renderer::createShaderProgram(GLuint pVertexShader, GLuint pFragmentShade
 
 	glDeleteShader(pVertexShader);
 	glDeleteShader(pFragmentShader);
+
+    glUseProgram(shaderProgram);
 
 	return shaderProgram;
 }

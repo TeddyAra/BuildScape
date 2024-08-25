@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <limits>
 
 #include "Chunk.h"
 #include "Camera.h"
@@ -44,6 +45,7 @@ private:
 	int topLayer;
 	bool internalFacesCulled;
 	int wireframe;
+	int currentId;
 
 	Camera* camera;
 	Renderer* renderer;

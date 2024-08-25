@@ -1,12 +1,13 @@
 #pragma once
 
 #include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/string_cast.hpp"
 
 class Camera {
 public:
-	Camera(glm::vec3 pPos, glm::vec3 pFront, glm::vec3 pUp, float pSensitivity, float pFov, float pSpeed);
+	Camera(glm::vec3 pPos, glm::vec3 pFront, glm::vec3 pUp, float pSensitivity, float pFov, float pSpeed, float pRange);
 	~Camera();
 
 	void update(float deltaTime);
@@ -38,9 +39,10 @@ public:
 		bool intersected = false;
 		bool inside = false;
 		int direction = -1;
+		float distance = -1;
 	};
 
-	IntersectionInfo checkIntersection(float pVoxelSize, glm::vec3 pPosition);
+	IntersectionInfo checkIntersection(float pVoxelSize, glm::vec3 pPosition, std::uint32_t pBlock);
 	
 private:
 	glm::vec3 position;
@@ -55,6 +57,7 @@ private:
 	float sensitivity;
 	float fov;
 	float speed;
+	float range;
 
 	float yaw;
 	float pitch;

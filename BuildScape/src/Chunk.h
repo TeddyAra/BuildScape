@@ -36,7 +36,7 @@ public:
 	struct InstanceData {
 		glm::vec3 offset;
 		glm::mat4 rotation;
-		int id;
+		float id;
 	};
 	std::vector<InstanceData> instances;
 
